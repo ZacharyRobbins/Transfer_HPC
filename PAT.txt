@@ -1,3 +1,18 @@
   fates_params_CA_StuntRanch.nc
   
 PAT: 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
+/turquoise/usr/projects/veg/zjrobbins/Fates_Sen
+/turquoise/usr/projects/veg/zjrobbins/ACME_cases/BCI
+ "BCI.T.IELMFATES.badger.intel.Cead8f1ada2-F977fe162.2022-05-23"
+ Filter_BCI.txt
+ 
+start year 2003
+end year 2004
+h1 vs h0
+/lustre/scratch4/turquoise/.mdt3/zjrobbins/E3SM/scratch/
+  
+  
+  
+  
+  
+  BCI.T.IELMFATES.badger.intel.Cead8f1ada2-F977fe162.2022-05-23.2/run/BCI.T.IELMFATES.badger.intel.Cead8f1ada2-F977fe162.2022-05-23.2.elm.h0.2003-01.nc
