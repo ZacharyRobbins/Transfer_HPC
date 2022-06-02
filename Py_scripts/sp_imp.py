@@ -5,7 +5,7 @@ Created on Fri May 27 10:16:55 2022
 @author: zacha
 """
 import os
-os.chdir('C:/Users/zacha/Documents/GitHub/Transfer_HPC')
+os.chdir('C:/Users/345578/Documents/GitHub/Transfer_HPC/Py_scripts/')
 import SP_func as sp
 #def rate_of_spread(wind, ### Site level wind 
 #                   sum_fuel, ### the sum fuel from f() fuelchar
@@ -15,7 +15,7 @@ import SP_func as sp
 #                   fuel_mef, ### The moisture extinction factor from f() fuelchar ## Commonly 15%dry or 40% wet (maybe 0.15-0.25)
 #                   effect_wspeed, ### The effective windspeed from f() effective winspeed
 #                   mineral_total,## UD portion of fuel that cant be burned.  Thonicke 0.01
-#                   SF_val_part_dens, ## UD I believe this is roughly the Packing ratio of fuel   0.11-0.00143
+#                   SF_val_part_dens, ## UD I believe this is roughly the 1/ Packing ratio of fuel   0.11-0.00143
 #                   SF_val_fuel_energy, ## UD Roughly energy per fuel  fuel (18 000) kJ kg−1 other places (20 000 kJ kg−1),
 #                   SF_val_miner_damp):  ## UD Another fuel char: dampening. Thonicke 0.41739
         
@@ -51,4 +51,15 @@ beta_op=0.200395*((fuel_sav)**(-0.8189))
 beta_ratio = beta/beta_op 
 
 
- xi = (np.exp((0.792 + 3.7597 * (fuel_sav**0.5)) * (beta+0.1))) / (192+7.9095 * fuel_sav)
+xi = (np.exp((0.792 + 3.7597 * (fuel_sav**0.5)) * (beta+0.1))) / (192+7.9095 * fuel_sav)
+
+
+
+#def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
+#                      NI_param_a,NI_param_b):  
+    
+    
+1/.11
+1/0.00143
+    
+    

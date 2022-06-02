@@ -73,3 +73,19 @@ def rate_of_spread(wind, ### Site level wind
         ROS_front=(ir*xi*(1.0+phi_wind)) / (Fuelbulkdensity*eps*q_ig)
     ROS_back=ROS_front*np.exp(-0.012*wind)    ## check wind
     return(ROS_front,ROS_back,ir)
+
+
+
+
+def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
+                      NI_param_a,NI_param_b):    
+    if (Daily_Rainfall >3.0): ### if rain > 3.0 reset NI
+        Site_Ni=0
+    else:
+        yipsolon=(NI_param_a*Daily_Temp_C)/(NI_param_b+Daily_Temp_C)+np.log(Daily_rh/100)
+        dewpoint=(NI_param_b*yipsolon)/(NI_param_a-yipsolon)
+        d_NI=(Daily_Temp_C-dewpoint)*Daily_Temp_C
+        if(d_NI<0.0): 
+            d_NI=0.0
+        Site_Ni+d_NI
+    return(Site_Ni)

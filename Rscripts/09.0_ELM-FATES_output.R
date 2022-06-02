@@ -20,6 +20,21 @@ set.groundhog.folder(groundhog.folder)
 groundhog.day = "2021-01-01"
 pkgs=c("smooth", "ncdf4", "tidyverse", "data.table", "hydroGOF", "SemiPar")
 groundhog.library(pkgs, groundhog.day)
+install.packages("smooth")
+install.packages("ncdf4")
+install.packages("tidyverse")
+install.packages('data.table')
+install.packages("SemiPar")
+
+library(smooth)
+library(ncdf4)
+library(tidyverse)
+library(data.table)
+library(SemiPar)
+
+
+
+
 ## Somehow SemiPar does not get installed with Pacman
 # install.packages("~/Downloads/SemiPar_1.0-4.2-2.tar", repos = NULL, type="source")
 # library(SemiPar)
@@ -45,9 +60,10 @@ theme_update(text = element_text(size=14),
 ###***************************
 #### Load Observed soil moisture and ET -------
 ###***************************
-load(file.path("data-raw/avasoilmoisture/vertical.rda"))
-load(file.path("data-raw/avasoilmoisture/horizontal.rda"))
-load(file.path("data-raw/bci.hydromet/forcings.rda"))
+data_dir<-"C:/Users/345578/Desktop/BCI/Val_data/"
+load(file.path(paste0(data_dir,"avasoilmoisture/vertical.rda")))
+load(file.path(paste0(data_dir,"avasoilmoisture/horizontal.rda")))
+load(file.path(paste0(data_dir,"bci.hydromet/forcings.rda")))
 ###***************************
 
 current.folder <- "2019-10-14_5000"
