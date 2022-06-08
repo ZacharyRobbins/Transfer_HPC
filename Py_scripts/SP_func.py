@@ -89,3 +89,14 @@ def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
             d_NI=0.0
         Site_Ni+d_NI
     return(Site_Ni)
+
+
+
+def fuelcalc(SAV,NI,SF_val_drying_ratio):
+    MEF= 0.524 - 0.066 * np.log(SAV) 
+    FuelMoisture= 2.71828**(-1.0 * (SAV/SF_val_drying_ratio)*NI) 
+    return(MEF,FuelMoisture)
+
+
+MEF,FuelMoisture=fuelcalc(126,1000,66000)
+print(MEF,FuelMoisture)
