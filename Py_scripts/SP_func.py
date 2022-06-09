@@ -75,8 +75,6 @@ def rate_of_spread(wind, ### Site level wind
     return(ROS_front,ROS_back,ir)
 
 
-
-
 def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
                       NI_param_a,NI_param_b):    
     if (Daily_Rainfall >3.0): ### if rain > 3.0 reset NI
@@ -90,12 +88,10 @@ def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
         Site_Ni+d_NI
     return(Site_Ni)
 
-
-
-def fuelcalc(SAV,NI,SF_val_drying_ratio):
-    MEF= 0.524 - 0.066 * np.log(SAV) 
-    FuelMoisture= 2.71828**(-1.0 * (SAV/SF_val_drying_ratio)*NI) 
-    return(MEF,FuelMoisture)
+def fuelcalc(SAV,Site_Ni,SF_val_drying_ratio):
+    fuel_mef= 0.524 - 0.066 * np.log(fuel_sav) 
+    fuel_eff_moist= 2.71828**(-1.0 * (fuel_sav/SF_val_drying_ratio)*Site_Ni) 
+    return(fuel_mef,fuel_eff_moist)
 
 
 MEF,FuelMoisture=fuelcalc(126,1000,66000)
