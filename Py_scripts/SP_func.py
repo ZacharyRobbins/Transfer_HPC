@@ -94,5 +94,5 @@ def fuelcalc(SAV,Site_Ni,SF_val_drying_ratio):
     return(fuel_mef,fuel_eff_moist)
 
 
-MEF,FuelMoisture=fuelcalc(126,1000,66000)
+MEF,FuelMoisture=fuelcalc(126,1000,66000)ls
 print(MEF,FuelMoisture)

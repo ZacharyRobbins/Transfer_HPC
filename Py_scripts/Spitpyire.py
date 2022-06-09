@@ -24,19 +24,30 @@ import pandas as pd
      # 1:4) four CWD_AG pools (twig, s branch, l branch, trunk), 5) dead leaves and 6) live grass
      # NCWD =4  NFSC = 6
      # tw_sf = 1, lb_sf = 3, tr_sf = 4, 
+NFSC=pd.DataFrame({'TissueType':['tw_sf','sb_sf','lb_sf','tr_sf','deadleaves','livegrass'],
+      'FBD':[15.4,16.8,19.6,999.0,4.0,4.0],
+      'SAV':[13.00,3.58,0.98,0.20,66.00,66.00],
+      'low_moisture_Coeff':[1.12, 1.09,0.98,0.80,1.15,1.15],
+      'low_moisture_Slope':[0.62,0.72 ,0.85, 0.80, 0.62, 0.62],
+      'mid_moisture':[0.72, 0.51, 0.38, 1.00, 0.80, 0.80],
+      'mid_moisture_Coeff':[2.35, 1.47, 1.06, 0.80, 3.20, 3.20],
+      'mid_moisture_Slope':[2.35, 1.47, 1.06, 0.80, 3.20, 3.20],
+      'min_moisture':[0.18, 0.12, 0.00, 0.00, 0.24, 0.24]
+      })
+
+NFSC.TissueType[1]
 
 
-NFSC={TissueType:['tw_sf','sb_sf','lb_sf','tr_sf','deadleaves','livegrass'],
-     
-     
-     SF_val_min_moisture:
-     SF_val_low_moisture_Coeff:
-     SF_val_low_moisture_Slope:
-     SF_val_mid_mid moisture:
-     SF_val_mid_moisture_Coeff:
-     SF_val_mid_moisture_Slope:
-     FC_ground:
-     tau_b}
+Vegframe=pd.DataFrame({'TissueType':['tw_sf','sb_sf','lb_sf','tr_sf','deadleaves','livegrass'],
+          'Biomass':[1.0,1.0,1.0,1.0,1.0,1.0],
+          'MEF':[0,0,0,0,0,0],
+          'alphaFMC':[0.0,0.0,0.0,0.0,0.0,0.0],
+          'fuelmoisture':[0,0,0,0,0,0],
+          'Fuelfrac':[0,0,0,0,0,0],
+          'litter_moisture':[0,0,0,0,0,0]
+          })
+
+
 
 
 
@@ -88,61 +99,55 @@ def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
 #fuel moisture extinstion factor and effective mosiiture. 
 
 
-
-def fuel_char(drying_ratio, SAV, FBD):
-    litt_c= currentPatch%litter(element_pos(carbon12_element))
+SF_val_drying_ratio=50
+Site_Ni=30
+def fuel_char(Vegframe,NFSC,SF_val_drying_ratio,Site_Ni):
+    #litt_c= currentPatch%litter(element_pos(carbon12_element))
     ##using each cohort
     ## caculate the cohorts that are grass
-    livegrass=livegrass+leaforgan_carbon
-    sumfuel=leaf_fines+agcwd+livegrass
+    #livegrass=livegrass+leaforgan_carbon
+    sumfuel=sum(Vegframe['Biomass'])
 
     #There are SIX fuel classes
      # 1:4) four CWD_AG pools (twig, s branch, l branch, trunk), 5) dead leaves and 6) live grass
      # NCWD =4  NFSC = 6
      # tw_sf = 1, sb_sf lb_sf = 3, tr_sf = 4, dl_sf = 5, lg_sf = 6,
     ### calculate fraction of fuels in each class
+   # sumfuel=4.0
     
-    fuel_tw_sd=agcwd/sumfeul
+    #'tw_sf','sb_sf','lb_sf','tr_sf'
+    #coarsefuel=Vegframe[Vegframe.TissueType=='tw_sf'].Biomass.values+Vegframe[Vegframe.TissueType=='sb_sf'].Biomass.values+Vegframe[Vegframe.TissueType=='lb_sf'].Biomass.values+Vegframe[Vegframe.TissueType=='tr_sf'].Biomass.values
+    fuel_tw_sd=coarsefuel/sumfuel
     #fuel_dl_sf=agcwd/sumfeul
-    fuel_dl_sf=leaf_fines/sumfuel
-    fuel_lg=livegrass/sumfuel
-    
-    ### This could be a subfunction
-    ### Calculate the drying ratio of no live grass fuels
-    alpha_FMC(tw_sf:dl_sf)      = SF_val_SAV(tw_sf:dl_sf)/SF_val_drying_ratio
-    ### calcualte fuel moisture for each class
-    tw_sf:dl_sf = exp(-1*((tw_sf:dl)sf)*Site_Ni)
-    
-    ## Fuelbulkdensity=currentPatch%fuel_bulkd +sum(fuelfraction(f1-f5)*Weight of each pool)?
-    ## Fuel_Savy=currentPatch%fuel_sav+sum(fuelfraction(f1-f5)*Weight of each pool)### surface area volume
-    ## Fuel_mef=currentPatch%fuel_mef  
-    ## Fuel_eff_moist 
-    ## currentPatch%fuel_eff_moist
-    
-    ##Basically we need to sum fuel bulk density,surface area volume andmoisture of extinction factor.7
-    
-    
-    
-    
-    currentPatch%fuel_sav = sum(SF_val_SAV(1:nfsc))/(nfsc) ! make average sav to avoid crashing code. 
+    #fuel_dl_sf=Vegframe[Vegframe.TissueType=='deadleaves'].Biomass.values/sumfuel
+    #fuel_lg= Vegframe[Vegframe.TissueType=='livegrass'].Biomass.values/sumfuel
+    FBD=0
+    MEF=0
+    SAV=0
+    fuel_moisture=0
+    for tt in Vegframe.TissueType:
+        print(tt)
+        Vegframe.loc[(Vegframe.TissueType==tt),'Fuelfrac']=Vegframe[Vegframe.TissueType==tt].Biomass.values/sumfuel
+        Vegframe.loc[(Vegframe.TissueType==tt),'MEF']= 0.524 - 0.066 * np.log(NFSC[NFSC.TissueType==tt].SAV.values)
+        Vegframe.loc[(Vegframe.TissueType==tt),'alphaFMC']=NFSC[NFSC.TissueType==tt].SAV.values/SF_val_drying_ratio
+        Vegframe.loc[(Vegframe.TissueType==tt),'fuelmoisture']=np.exp(-1*Vegframe.loc[(Vegframe.TissueType==tt),'alphaFMC']*Site_Ni)
+        if(tt=='livegrass'):
+                 Vegframe.loc[(Vegframe.TissueType==tt),'fuelmoisture']=np.exp(-1*Vegframe.loc[(Vegframe.TissueType=='deadleaves'),'alphaFMC']*Site_Ni).values
+        if(tt!='tr_sf'):
+            FBD=FBD+(Vegframe.loc[(Vegframe.TissueType==tt),'Fuelfrac'].values*NFSC[NFSC.TissueType==tt].FBD.values)
+            SAV=SAV+(Vegframe.loc[(Vegframe.TissueType==tt),'Fuelfrac'].values*NFSC[NFSC.TissueType==tt].SAV.values)
+            MEF=MEF+(Vegframe.loc[(Vegframe.TissueType==tt),'Fuelfrac'].values*Vegframe.loc[(Vegframe.TissueType==tt),'MEF'].values)
+            fuel_moisture=fuel_moisture+(Vegframe.loc[(Vegframe.TissueType==tt),'Fuelfrac'].values*Vegframe.loc[(Vegframe.TissueType==tt),'fuelmoisture'].values)
+        Vegframe.loc[(Vegframe.TissueType==tt),'litter_moisture']=Vegframe.loc[(Vegframe.TissueType==tt),'fuelmoisture']/Vegframe.loc[(Vegframe.TissueType==tt),'MEF'].values
+    return(FBD,SAV,MEF,fuel_moisture,Vegframe)  
+  
+FBD,SAV,MEF,fuel_moisture,Vegframe=fuel_char(Vegframe,NFSC,SF_val_drying_ratio,Site_Ni)
 
-
-def wind_effect():
-    total grass area
-    tree fraction
-    grass_fraction
-    bare_fraction
-    ## Convert wind into m/min
-    ## Calculate total tree area
-    ## Calculate total grass area
-    ## calculate tree fraction and grass fraction 
-    ##check continuity
+def wind_effect(tree_fraction, wind ):
     grassfraction=np.min(grass_fraction,1-tree_fraction)
     bare_fraction=1-(tree_fraction+grassfraction)
-    total_tree area
-    effective_wspeed= wind *(Treefraction*0.04+(grass_fraction+bare_fraction)*0.6)
-
-
+    effective_wspeed= wind *(tree_fraction*0.04+(grass_fraction+bare_fraction)*0.6)
+    return(effective_wspeed)
 
 def rate_of_spread(sum_fuel, ### the sum fuel from f() fuelchar
                    mineral_total,## portion of fuel that cant be burned. 
@@ -215,6 +220,7 @@ def ground_fuel_consumption(NFSC,###DataFrame of tissues
     ## ta_b(nfsc) lethal heating rate for each fuel class
     ## fc_ground(nfsc) ! Propriont of fuel consumbed
     for 1:nfsc
+        
         if moist<=SF_val_min_moisture():
             pool_burntfraction_litter=1.0 ### All fuel in pool is consumed
         if moist >SF_val_mid_moisture .and. moist <=SF_val_mid_mid moisture(c):
