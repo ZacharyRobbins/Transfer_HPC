@@ -12,11 +12,12 @@ import geopandas as gpd
 
 Ign_Dir='C:/Users/345578/Desktop/California_chaparral_project/Validation_Data/Ignitions/'
 StudyArea=gpd.read_file(
-    "C:/Users/345578/Desktop/California_chaparral_project/Rough_Study_Area.gpkg"
-    ).to_crs({'init': 'epsg:3857'})
+    "C:/Users/345578/Desktop/California_chaparral_project/StudyArea_climate.shp"
+   ).to_crs({'init': 'epsg:3857'})
+
 #print(StudyArea.crs)
 Area=StudyArea['geometry'].area
-Ign =gpd.read_file(Ign_Dir+"Ign_SA.gpkg")
+Ign =gpd.read_file(Ign_Dir+"KS_subbed.gpkg")
 
 ### Ignitions per year. 
 nIgnbyYear=(Ign
@@ -27,6 +28,7 @@ nIgnbyYear=(Ign
 nIgnbyYear=pd.DataFrame(nIgnbyYear).rename(columns={'OBJECTID':'peryear'})
 nIgnbyYear["perm2"]=nIgnbyYear['peryear']/Area.values
 nIgnbyYear["perkm2"]=nIgnbyYear["perm2"]*10**6
+nIgnbyYear["IRI"]=1/nIgnbyYear["perkm2"]
 list(Ign.columns)
 
 #### Fire days per year
@@ -42,8 +44,7 @@ nFiredaysperYear=(Ign
 nFiredaysperYear=pd.DataFrame(nFiredaysperYear).rename(columns={'FireDays':'peryear'})
 nFiredaysperYear["perm2"]=nFiredaysperYear['peryear']/Area.values
 nFiredaysperYear["perkm2"]=nFiredaysperYear["perm2"]*10**6
-
-
+nFiredaysperYear["IRI"]=1/nFiredaysperYear["perkm2"]
 ### Burned area per year per unit (Fire rotation period)
 
 Area_Burned_Year=(Ign
@@ -67,3 +68,4 @@ Fire_size_Class=pd.DataFrame(Ign
     ['FireClass'].count()
     )
 Fire_size_Class['Percentage']=100*Fire_size_Class['FireClass']/sum(Fire_size_Class['FireClass'])
+Fire_size_Class['LowerBound']=[0, 10, 50,100,500,1000,5000, 10000,50000]

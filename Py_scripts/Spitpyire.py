@@ -2,7 +2,7 @@
 """
 Spyder Editor
 
-A python version of spitfire for understanding and testing
+This is a temporary script file.
 """
 
 import numpy as np
@@ -63,7 +63,7 @@ NFSC={TissueType:['tw_sf','sb_sf','lb_sf','tr_sf','deadleaves','livegrass'],
 ###~~~~~~~~~~~~~~~~~~~~~~####
 
 
-##################################    
+##################    
 def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
                       NI_param_a,NI_param_b):    
     if (Daily_Rainfall >3.0): ### if rain > 3.0 reset NI
@@ -76,22 +76,10 @@ def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
             d_NI=0.0
         Site_Ni+d_NI
     return(Site_Ni)
-###################################
-def wind_effect(wind,tree_fraction,grass_fraction):
-    ## Convert wind into m/min
-    ## Calculate total tree area
-    ## Calculate total grass area
-    ## calculate tree fraction and grass fraction 
-    ##check continuity
-    grass_fraction=min(grass_fraction,1-tree_fraction)
-    bare_fraction=1-(tree_fraction+grass_fraction)
-    effective_wspeed= wind *(tree_fraction*0.4+(grass_fraction+bare_fraction)*0.6)
-    return(effective_wspeed)
-wind_effect(26.1,1.0,0.0)
-####################################
+#####################
 
 
-###In dev############################
+
 
 
 ### Perhaps we remove this and just have it be 
@@ -99,74 +87,6 @@ wind_effect(26.1,1.0,0.0)
 #fuel surface area volume
 #fuel moisture extinstion factor and effective mosiiture. 
 
-
-def rate_of_spread(wind, ### Site level wind 
-                   sum_fuel, ### the sum fuel from f() fuelchar
-                   Fuelbulkdensity ### the FBD from f() fuelchar ( 0.40- 6.4)t-ac 
-                   fuel_sav ### The surface area volume from f() fuelchar 1672- 2054 (this is ft-1)
-                   fuel_eff_moist ### Thefuel effective moisture from f() fuelchar
-                   fuel_mef ### The moisture extinction factor from f() fuelchar ## Commonly 15%dry or 40% wet (maybe 0.15-0.25)
-                   effect_wspeed ### The effective windspeed from f() effective winspeed
-                   mineral_total,## UD portion of fuel that cant be burned.  Thonicke 0.01
-                   SF_val_part_dens ## UD I believe this is roughly the Packing ratio of fuel   0.11-0.00143
-                   SF_val_fuel_energy ## UD Roughly energy per fuel  fuel (18 000) kJ kg−1 other places (20 000 kJ kg−1),
-                   SF_val_miner_damp   ## UD Another fuel char: dampening. Thonicke 0.41739
-        ):
-    q_dry = 581.0 ### heat of pre ignition of dry fuels. 
-    ### remove mineral content from net fulel load (Thonicke 2010)
-    sum_fuel=sum_fuel(1-mineral_total)
-    beta=Fuelbulkdensity/SF_val_part_dens ### Ithink this is 0.00143 in scott
-    bet_op=0.200395*(fuel_sav)**(-0.8189)
-    beta_ratio = beta/beta_op  
-    ### heat of pre ignition 
-    # ---heat of pre-ignition---
-    #   !  Equation A4 in Thonicke et al. 2010
-    #   !  Rothermal EQ12= 250 Btu/lb + 1116 Btu/lb * fuel_eff_moist
-    #   !  conversion of Rothermal (1972) EQ12 in BTU/lb to current kJ/kg 
-    #   !  q_ig in kJ/kg 
-    q_ig = q_dry +2594.0 * fuel_eff_moist
-    #! ---effective heating number---
-    #! Equation A3 in Thonicke et al. 2010.  
-    eps = exp(-4.528/ fuel_sav)     
-    #! Equation A7 in Thonicke et al. 2010
-    b = 0.15988_r8 * (fuel_sav**0.54_r8)
-    #! Equation A8 in Thonicke et al. 2010
-    c = 7.47 * (exp(-0.8711 * (fuel_sav**0.55_r8)))
-    #! Equation A9 in Thonicke et al. 2010. 
-    e = 0.715 * (exp(-0.01094 * fuel_sav))
-    phi_wind = c * ((3.281*effect_wspeed)**b)*(beta_ratio**(-e)) 
-    #! ---propagating flux----
-    # Equation A2 in Thonicke et al.2010 and Eq. 42 Rothermal 1972
-    #! xi (unitless)       
-    xi = (exp((0.792_r8 + 3.7597_r8 * (fuel_sav**0.5_r8)) * (beta+0.1_r8))) / &
-            (192_r8+7.9095_r8 * fuel_sav)      
-    ## ! ---reaction intensity----
-    ##   ! Equation in table A1 Thonicke et al. 2010. 
-    a = 8.9033_r8 * (currentPatch%fuel_sav**(-0.7913_r8))
-    a_beta = exp(a*(1.0_r8-beta_ratio))  #!dummy variable for reaction_v_opt equation
-    ## ! Equation in table A1 Thonicke et al. 2010.
-    ## ! reaction_v_max and reaction_v_opt = reaction velocity in units of per min
-    ## ! reaction_v_max = Equation 36 in Rothermal 1972 and Fig 12 
-    reaction_v_max  = 1.0_r8 / (0.0591_r8 + 2.926_r8* (fuel_sav**(-1.5_r8)))
-    ## ! reaction_v_opt =  Equation 38 in Rothermal 1972 and Fig 11
-    reaction_v_opt = reaction_v_max*(beta_ratio**a)*a_beta
-    # ! mw_weight = relative fuel moisture/fuel moisture of extinction
-    # ! average values for litter pools (dead leaves, twigs, small and large branches) plus grass
-    mw_weight = fuel_eff_moist/fuel_mef
-    # ! Equation in table A1 Thonicke et al. 2010. 
-    # ! moist_damp is unitless
-    moist_damp = max(0.0_r8,(1.0_r8 - (2.59_r8 * mw_weight) + (5.11_r8 * (mw_weight**2.0_r8)) - &
-            (3.52_r8*(mw_weight**3.0_r8))))   
-    # ! ir = reaction intenisty in kJ/m2/min
-    #  currentPatch%sum_fuel converted from kgC/m2 to kgBiomass/m2 for ir calculation
-    ir = reaction_v_opt*(sum_fuel/0.45_r8)*SF_val_fuel_energy*moist_damp*SF_val_miner_damp   
-    ##if fuel or effective heat or heat of pre-igintion is zero 
-    if fuel density <=0.0 .or. eps.<=0 .or. q_ig<=0.0:
-        ROS_front =0.0
-    else: 
-        ROS_front=(ir*xi*(1.0+phi_wind)) / (Fuelbulkdensity*eps*q_ig)
-    ROS_back=ROS_front*exp(-0.012*wind)    ## check wind
-    return(ROS_front,ROS_back,ir)
 
 
 def fuel_char(drying_ratio, SAV, FBD):
@@ -200,7 +120,88 @@ def fuel_char(drying_ratio, SAV, FBD):
     ## currentPatch%fuel_eff_moist
     
     ##Basically we need to sum fuel bulk density,surface area volume andmoisture of extinction factor.7
+    
+    
+    
+    
     currentPatch%fuel_sav = sum(SF_val_SAV(1:nfsc))/(nfsc) ! make average sav to avoid crashing code. 
+
+
+def wind_effect():
+    total grass area
+    tree fraction
+    grass_fraction
+    bare_fraction
+    ## Convert wind into m/min
+    ## Calculate total tree area
+    ## Calculate total grass area
+    ## calculate tree fraction and grass fraction 
+    ##check continuity
+    grassfraction=np.min(grass_fraction,1-tree_fraction)
+    bare_fraction=1-(tree_fraction+grassfraction)
+    total_tree area
+    effective_wspeed= wind *(Treefraction*0.04+(grass_fraction+bare_fraction)*0.6)
+
+
+
+def rate_of_spread(sum_fuel, ### the sum fuel from f() fuelchar
+                   mineral_total,## portion of fuel that cant be burned. 
+                   
+        ):
+    q_dry = 581.0 ### heat of pre ignition of dry fuels. 
+    ### remove mineral content from net fulel load (Thonicke 2010)
+    sum_fuel=sum_fuel(1-mineral_total)
+    beta=Fuelbulkdensity/SF_val_part_dens
+    bet_op=0.200395*(fuel_sav)**(-0.8189)
+    beta_ratio = beta/beta_op  
+    ### heat of pre ignition 
+    # ---heat of pre-ignition---
+    #   !  Equation A4 in Thonicke et al. 2010
+    #   !  Rothermal EQ12= 250 Btu/lb + 1116 Btu/lb * fuel_eff_moist
+    #   !  conversion of Rothermal (1972) EQ12 in BTU/lb to current kJ/kg 
+    #   !  q_ig in kJ/kg 
+    q_ig = q_dry +2594.0 * fuel_eff_moist
+    #! ---effective heating number---
+    #! Equation A3 in Thonicke et al. 2010.  
+    eps = exp(-4.528/ fuel_sav)     
+    #! Equation A7 in Thonicke et al. 2010
+    b = 0.15988_r8 * (fuel_sav**0.54_r8)
+    #! Equation A8 in Thonicke et al. 2010
+    c = 7.47 * (exp(-0.8711 * (fuel_sav**0.55_r8)))
+    #! Equation A9 in Thonicke et al. 2010. 
+    e = 0.715 * (exp(-0.01094 * fuel_sav))
+    phi_wind = c * ((3.281*effect_wspeed)**b)*(beta_ratio**(-e)) 
+    #! ---propagating flux----
+    # Equation A2 in Thonicke et al.2010 and Eq. 42 Rothermal 1972
+    #! xi (unitless)       
+    xi = (exp((0.792_r8 + 3.7597_r8 * (fuel_sav**0.5_r8)) * (beta+0.1_r8))) / &
+            (192_r8+7.9095_r8 * fuel_sav)      
+    ## ! ---reaction intensity----
+    ##   ! Equation in table A1 Thonicke et al. 2010. 
+    a = 8.9033_r8 * (currentPatch%fuel_sav**(-0.7913_r8))
+    a_beta = exp(a*(1.0_r8-beta_ratio))  !dummy variable for reaction_v_opt equation
+    ## ! Equation in table A1 Thonicke et al. 2010.
+    ## ! reaction_v_max and reaction_v_opt = reaction velocity in units of per min
+    ## ! reaction_v_max = Equation 36 in Rothermal 1972 and Fig 12 
+    reaction_v_max  = 1.0_r8 / (0.0591_r8 + 2.926_r8* (currentPatch%fuel_sav**(-1.5_r8)))
+    ## ! reaction_v_opt =  Equation 38 in Rothermal 1972 and Fig 11
+    reaction_v_opt = reaction_v_max*(beta_ratio**a)*a_beta
+    # ! mw_weight = relative fuel moisture/fuel moisture of extinction
+    # ! average values for litter pools (dead leaves, twigs, small and large branches) plus grass
+    mw_weight = currentPatch%fuel_eff_moist/currentPatch%fuel_mef
+    # ! Equation in table A1 Thonicke et al. 2010. 
+    # ! moist_damp is unitless
+    moist_damp = max(0.0_r8,(1.0_r8 - (2.59_r8 * mw_weight) + (5.11_r8 * (mw_weight**2.0_r8)) - &
+            (3.52_r8*(mw_weight**3.0_r8))))   
+    # ! ir = reaction intenisty in kJ/m2/min
+    #  currentPatch%sum_fuel converted from kgC/m2 to kgBiomass/m2 for ir calculation
+    ir = reaction_v_opt*(sum_fuel/0.45_r8)*SF_val_fuel_energy*moist_damp*SF_val_miner_damp   
+    ##if fuel or effective heat or heat of pre-igintion is zero 
+    if fuel density <=0.0 .or. eps.<=0 .or. q_ig<=0.0:
+        ROS_front =0.0
+    else: 
+        ROS_front=(ir*xi*(1.0+phi_wind)) / (fuel_bulkd*eps*q_ig)
+    ROS_back=ROS_front*exp(-0.012*wind)    
 
 
     
