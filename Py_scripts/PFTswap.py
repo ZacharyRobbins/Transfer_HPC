@@ -15,7 +15,7 @@ from datetime import datetime
 from scipy.io import netcdf
 import os
 #import matplotlib.pyplot as plt
-os.chdir("C:/Users/345578/Documents/GitHub/Transfer_HPC/")
+os.chdir("C:/Users/zacha/Documents/GitHub/Transfer_HPC/")
 def main(input_fname,output_fname,donor_pft_indices):
 
     # Interpret the arguments to the script
@@ -150,4 +150,4 @@ hydro_dim_name = 'fates_hydr_organs'
 litt_dim_name = 'fates_litterclass'
 string_dim_name = 'fates_string_length'
 
-main('fates_params_CA_StuntRanch.nc','testonepft2.nc',[1,1,1,1,1,1])
+main('fates_params_CA_StuntRanch.nc','SR_justGrass.nc',[2])
