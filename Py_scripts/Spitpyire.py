@@ -99,8 +99,6 @@ def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
 #fuel moisture extinstion factor and effective mosiiture. 
 
 
-SF_val_drying_ratio=50
-Site_Ni=30
 def fuel_char(Vegframe,NFSC,SF_val_drying_ratio,Site_Ni):
     #litt_c= currentPatch%litter(element_pos(carbon12_element))
     ##using each cohort
@@ -117,7 +115,6 @@ def fuel_char(Vegframe,NFSC,SF_val_drying_ratio,Site_Ni):
     
     #'tw_sf','sb_sf','lb_sf','tr_sf'
     #coarsefuel=Vegframe[Vegframe.TissueType=='tw_sf'].Biomass.values+Vegframe[Vegframe.TissueType=='sb_sf'].Biomass.values+Vegframe[Vegframe.TissueType=='lb_sf'].Biomass.values+Vegframe[Vegframe.TissueType=='tr_sf'].Biomass.values
-    fuel_tw_sd=coarsefuel/sumfuel
     #fuel_dl_sf=agcwd/sumfeul
     #fuel_dl_sf=Vegframe[Vegframe.TissueType=='deadleaves'].Biomass.values/sumfuel
     #fuel_lg= Vegframe[Vegframe.TissueType=='livegrass'].Biomass.values/sumfuel
@@ -143,7 +140,7 @@ def fuel_char(Vegframe,NFSC,SF_val_drying_ratio,Site_Ni):
   
 FBD,SAV,MEF,fuel_moisture,Vegframe=fuel_char(Vegframe,NFSC,SF_val_drying_ratio,Site_Ni)
 
-def wind_effect(tree_fraction, wind ):
+def wind_effect(tree_fraction,grass_fraction, wind ):
     grassfraction=np.min(grass_fraction,1-tree_fraction)
     bare_fraction=1-(tree_fraction+grassfraction)
     effective_wspeed= wind *(tree_fraction*0.04+(grass_fraction+bare_fraction)*0.6)

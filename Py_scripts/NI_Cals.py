@@ -41,7 +41,7 @@ def NI_proc(DailyTmean,Precip,DailyRhmean,a,b):
        NI_vec=np.append(NI_vec,Site_Ni)
    return(NI_vec)
 
-def:
+#def:
 
 #####################
 ### Datasets and cleaning ###################################
