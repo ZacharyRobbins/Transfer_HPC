@@ -8,7 +8,7 @@ Created on Thu Jun  9 09:10:13 2022
 
 import pandas as pd
 import numpy as np 
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from bisect import bisect_left
 import geopandas as gpd
 from functools import partial 
@@ -34,7 +34,7 @@ def NI_proc(DailyTmean,Precip,DailyRhmean,a,b):
    for i in list(range(0,len(Precip['value']))):
        Site_Ni=fire_danger_index(Site_Ni,
                               np.array(DailyTmean)[i],
-                              np.array(Precip['value'])[i]*10,
+                              np.array(Precip['value'])[i],
                               np.array(DailyRhmean)[i],
                               a,
                               b)
@@ -43,55 +43,62 @@ def NI_proc(DailyTmean,Precip,DailyRhmean,a,b):
 
 #def:
 
-#####################
 ### Datasets and cleaning ###################################
 ######
 
 
-Dir='C:/Users/345578/Desktop/California_chaparral_project/Practice_Climate/'
+Dir='C:/Users/zacha/Desktop/CA_Chap/'
 Precip=pd.read_csv(Dir+"Eco1_CA_Chap_pr_Table.csv")
 rhmax=pd.read_csv(Dir+"Eco1_CA_Chap_rmax_Table.csv")
 rhmin=pd.read_csv(Dir+"Eco1_CA_Chap_rmin_Table.csv")
-windspeed=pd.read_csv(Dir+"Eco1_CA_Chap_th_Table.csv")
-winddirection=pd.read_csv(Dir+"Eco1_CA_Chap_vs_Table.csv")
+winddirection=pd.read_csv(Dir+"Eco1_CA_Chap_th_Table.csv")
+windspeed =pd.read_csv(Dir+"Eco1_CA_Chap_vs_Table.csv")#m/s
 tmmn=pd.read_csv(Dir+"Eco1_CA_Chap_tmmn_Table.csv")
 tmmx=pd.read_csv(Dir+"Eco1_CA_Chap_tmmx_Table.csv")
 DailyTmean=((tmmx['value']-273.15)+(tmmn['value']-273.15))/2
 DailyRhmean=((rhmax['value']+rhmin['value'])/2)
-Ign_Dir='C:/Users/345578/Desktop/California_chaparral_project/Validation_Data/Ignitions/'
-Ign =gpd.read_file(Ign_Dir+"KS_subbed.gpkg")
-nIgnperday=pd.DataFrame((Ign[['DISCOVERY_DATE', 'FIRE_SIZE']]
-    .query('FIRE_SIZE >1')
-     .groupby('DISCOVERY_DATE')
-     ['FIRE_SIZE'].count()))
+Ign_Dir='C:/Users/zacha/Downloads/chap/'
+Ign =gpd.read_file(Ign_Dir+"chapclip3.shp")
+nIgnperday=pd.DataFrame((Ign[['DISCOVE', 'FIRE_SI']]
+    .query('FIRE_SI >100')
+     .groupby('DISCOVE')
+     ['FIRE_SI'].count()))
 #nIgnperday=pd.DataFrame(nIgnperday).columns=['nIgn']
 #nIgnperday['Date']=pd.to_datetime(nIgnperday['Date'])
 nIgnperday['Dates']=pd.to_datetime(nIgnperday.index.values)
 ##########
 ### Setup a partial function.
 ### Shorten up Climate ins. 
-NI_part=partial(NI_proc, DailyTmean=DailyTmean, Precip=Precip, DailyRhmean=DailyRhmean)
+DailyTmean[4748:]
+
+
+
+
+
+
+
 ######
 Outy=pd.DataFrame(columns=['a','b','No',"Low","Med","Max"])
 
 runs=1000
 for i in list(range(1,runs)):
     print(i)
-    a=np.round(np.random.uniform(50,200))# 20:200
-    b=np.round(np.random.uniform(500,1000))
-    NI_out=NI_part(a=200,b=200)
+    a=np.round(np.random.uniform(0,20))# 20:200
+    b=np.round(np.random.uniform(1,100))
+    NI_out=NI_part(a=12,b=76)
     #plt.plot(NI_out)
-    NI_df=pd.DataFrame({'Dates':pd.to_datetime(Precip.date),"NI":NI_out[1:]}).query('Dates> (19920101)')
+    NI_df=pd.DataFrame({'Dates':pd.to_datetime(Precip.date[4748:]),"NI":NI_out[1:]}).query('Dates> (19920101)')
     Joined=pd.merge(NI_df, nIgnperday, how='left', on='Dates')
-    Joined['FIRE_SIZE']=Joined['FIRE_SIZE'].fillna(0)
+    Joined['FIRE_SI']=Joined['FIRE_SI'].fillna(0)
     #plt.plot(Joined['FIRE_SIZE'],Joined['NI'])
     Joined=Joined.sort_values(by=['NI'])
-    Joined['Cumsum']=Joined['FIRE_SIZE'].cumsum()
+    Joined['Cumsum']=Joined['FIRE_SI'].cumsum()
     
-    No=  Joined.loc[bisect_left(Joined['Cumsum'],Joined['Cumsum'].quantile(0.05)),'NI'] ### Aiming for 300
-    Low=  Joined.loc[bisect_left(Joined['Cumsum'],Joined['Cumsum'].quantile(0.20)),'NI'] ### Aiming for 1000
-    Med=  Joined.loc[bisect_left(Joined['Cumsum'],Joined['Cumsum'].quantile(0.65)),'NI'] ### Aiming for 4000     
+    No=  Joined.loc[bisect_left(Joined['Cumsum'],Joined['Cumsum'].quantile(0.20)),'NI'] ### Aiming for 300
+    Low=  Joined.loc[bisect_left(Joined['Cumsum'],Joined['Cumsum'].quantile(0.64)),'NI'] ### Aiming for 1000
+    Med=  Joined.loc[bisect_left(Joined['Cumsum'],Joined['Cumsum'].quantile(0.85)),'NI'] ### Aiming for 4000     
     Max=max(Joined['NI']) ### Aiming in the range of 10,000
+    print(No,Low,Med,Max)
     indy=pd.Series(1)
     Inny=pd.DataFrame({'a':a,'b':b,'No':No,"Low":Low,"Med":Med,"Max":Max},index=indy)
     Outy=Outy.append(Inny,ignore_index=True)
