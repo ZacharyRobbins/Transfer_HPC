@@ -52,21 +52,22 @@ createnewcdf<-function(Drive,file,newname,varDF){
 
 #"fates_fire_fdi_alpha","fates_fire_fdi_b"
 fates_para=nc_open(paste0(Drive,file))
-fates_para=file
+#fates_para=file
 names(fates_para$var)
+var_name="fates_fire_nignitions"
 fates_para$var[[var_name]]$unit
 fates_para$var[[var_name]]$longname
 "fates_pftname" 
 
 
-ncvar_get(fates_para,"fates_pftname")
-
+ncvar_get(fates_para,"fates_fire_fdi_a")
+# 0.0082 from data
 ####### Building update dataframe
 Var_2_change<-data.frame(
   Name=c("fates_fire_fdi_a",
          "fates_fire_fdi_b"),
   Value=c(12,
-          130),
+          86),
   pftl=c(0,
          0),
   pfth=c(0,
@@ -85,7 +86,7 @@ Var_2_change<-data.frame(
 
 #### File that is the baseline
 Drive='C:/Users/345578/Documents/GitHub/Transfer_HPC/'
-file='testonepft2.nc'
+file='fates_params_CA_StuntRanch.nc'
 newname="fates_params_CA_SR_update2.nc"
 
 
