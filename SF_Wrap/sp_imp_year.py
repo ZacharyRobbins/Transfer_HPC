@@ -374,8 +374,8 @@ SF_part=partial(SF_wrapper,Vegframe=Vegframe,NFSC=NFSC,DailyTmean=DailyTmean,
                SF_val_fuel_energy=SF_val_fuel_energy,
                tree_fraction=Treefraction)
 
-jobs=7
-runs=2
+jobs=28
+runs=40
 for q in list(range(0,runs)):
     print(list(range(jobs*q,jobs*q+jobs)))
     start = time.time()
