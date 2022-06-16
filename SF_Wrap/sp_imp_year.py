@@ -296,12 +296,12 @@ def SF_wrapper(r,Vegframe,NFSC,DailyTmean,
     print(r)
     ###Generate Parameters
    # wind=np.random.uniform(5,50)
-    SF_val_drying_ratio=np.random.uniform(10000,80000) ##defaults at 66000
+    SF_val_drying_ratio=np.random.uniform(1000,30000) ##defaults at 66000
     mineral_total=np.random.uniform(.01,.1)                                
     SF_val_miner_damp =np.random.uniform(0.3,0.5) 
     SF_val_fdi_alpha=np.random.uniform(0.0001,0.0009 )  ### 0.00037  
-    SF_val_part_dens=np.random.uniform(1/0.011,1/0.0011) 
-    SF_val_durat_slope=np.random.uniform(0.0,.2)                      
+    SF_val_part_dens=np.random.uniform(10,1200) 
+    SF_val_durat_slope=np.random.uniform(0.0,0.5)                      
     
     Outy=pd.DataFrame(columns=["Date","Site_Ni","wind","Fractionburned","Fire_intensity","AB",'ROS_front',"fuel_moisture"])
     Site_Ni=0
