@@ -54,7 +54,7 @@ createnewcdf<-function(Drive,file,newname,varDF){
 fates_para=nc_open(paste0(Drive,file))
 #fates_para=file
 names(fates_para$var)
-var_name="fates_fire_durat_slope"  
+var_name="fates_fire_nignitions"  
 fates_para$var[[var_name]]$unit
 fates_para$var[[var_name]]$longname
 ncvar_get(fates_para,var_name)

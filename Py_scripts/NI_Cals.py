@@ -73,7 +73,7 @@ NI_part=partial(NI_proc, DailyTmean=DailyTmean, Precip=Precip, DailyRhmean=Daily
 ######
 Outy=pd.DataFrame(columns=['a','b','No',"Low","Med","Max"])
 
-runs=10000
+runs=1
 for i in list(range(1,runs)):
     print(i)
     a=np.round(np.random.uniform(10,50))# 20:200
@@ -99,5 +99,5 @@ for i in list(range(1,runs)):
 Outy['Ratio']=Outy['Max']+Outy['Med']
 
 
-
+NI_df.to_csv("NestorvExternal.csv")
 plt.plot(NI_out[1:])
