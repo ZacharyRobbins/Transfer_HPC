@@ -1,0 +1,13 @@
+parameter,value,valuemin,valuemax,pft.start,pft.end,org.start,org.end
+fates_fire_drying_ratio,40,1000,50000,1,1,0,0
+fates_fire_fdi_alpha,0,0.0001,0.0009,1,1,0,0
+fates_fire_miner_damp,0.000964,0.4,0.6,1,1,0,0
+fates_fire_miner_total,1.9492,0.9746,2.9238,1,1,0,0
+fates_fire_threshold,50,25,100,1,1,0,0
+fates_fire_part_dens,0,100,1000,1,1,0,0
+fates_fire_max_durat,2,240,640,1,1,0,0
+fates_fire_nignitions,0,0.0082,0.0081,1,1,0,0
+fates_fire_cg_strikes,0,0.99,1,1,1,0,0
+fates_fire_fdi_a,0,17.62,17.7,1,1,0,0
+fates_fire_fdi_b,0,243,244,1,1,0,0
+fates_fire_durat_slope,0,-5,-15,1,1,0,0

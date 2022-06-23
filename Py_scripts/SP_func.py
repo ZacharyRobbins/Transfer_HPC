@@ -91,7 +91,7 @@ def fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
         d_NI=(Daily_Temp_C-dewpoint)*Daily_Temp_C
         if(d_NI<0.0): 
             d_NI=0.0
-        Site_Ni+d_NI
+        Site_Ni=Site_Ni+d_NI
     return(Site_Ni)
 
 #def fuelcalc(SAV,Site_Ni,SF_val_drying_ratio):

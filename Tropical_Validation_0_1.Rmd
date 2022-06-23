@@ -1,0 +1,1351 @@
+---
+title: "Tropics Val"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libs}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(reshape)
+library(scales)
+library(hydroGOF)
+library(scales)
+library(smooth)
+library(ncdf4)
+library(tidyverse)
+library(data.table)
+library(SemiPar)
+library(nse)
+```
+
+```{r functions}
+### Process unidimensional R data
+ProctoDF<-function(set){
+  a1=as.data.frame(set)
+  Dates_fates=as.Date(paste0(gsub("\\.","/",gsub("X","",colnames(a1))),"/01"))
+  a1=as.data.frame(t(a1))
+  a1$Date=as.Date(Dates_fates)
+  a1=reshape::melt(a1,id=c("Date"))
+  colnames(a1)=c("Date","Replicate","Variable")
+  return(a1)
+}
+### Process R outputs that contain a NCSF
+ProctoDF_NCSF<-function(set){
+  set<-var.res.arr
+  a1=as.data.frame(set)
+  Dates_fates=as.Date(paste0(gsub("\\.","/",gsub("X","",colnames(a1))),"/01"))
+  a1=as.data.frame(t(a1))
+  a1$Date=as.Date(Dates_fates)
+  a1$Size<-c(rep(1,66430/13),rep(2,66430/13),rep(3,66430/13),rep(4,66430/13),
+               rep(5,66430/13),rep(6,66430/13),rep(7,66430/13),rep(8,66430/13),
+               rep(9,66430/13),rep(10,66430/13),rep(11,66430/13),rep(12,66430/13),rep(13,66430/13))
+  a1=reshape::melt(a1,id=c("Date","Size"))
+  colnames(a1)=c("Date","Size","Replicate","Variable")
+  return(a1)
+}
+### Generate leaf vulnerability curves
+Leaf_Vuln_Curve<-function(psi,A,B){
+  return(A*exp(B*psi))
+}
+```
+
+
+```{r}
+wdir<-"C:/Users/345578/Desktop/NGEE_Tropics_data/"
+LWP_data<-"/NGT0036_2016_Panama_LWP_v2/Data/2016ENSO_Panama_LWP_v2.csv"
+LWP_csv<-read.csv(paste0(wdir,LWP_data))
+colnames(LWP_csv)[1]<-"Date"
+
+LWP_sub<-LWP_csv %>%
+  filter(Location =="PA-BCI")%>%
+  mutate(DT=as.POSIXct(paste0(Date," ",LWP_time)))
+head(LWP_sub)
+
+ggplot(dat=LWP_sub,aes(x=DT,y=LWP_bar,fill=Species))+
+  geom_line(aes(color=Species),lwd=2.5)+
+  theme_classic()
+Sp_Mean<-LWP_sub %>%
+  group_by(hour=hour(DT))%>%
+  summarise(SP_mean=mean(LWP_bar))
+ggplot(dat=Sp_Mean,aes(x=hour,y=SP_mean))+
+  geom_line(lwd=2.5)+
+  theme_classic()
+
+load(file.path("C:/Users/345578/Documents/GitHub/Transfer_HPC/FATES_LWP_SCPF.h1.extract.Rdata"))
+ProctoDF_Tissue<-function(set){
+  set<-var.res.arr
+  a1=as.data.frame(set)
+  Dates_fates=as.Date(paste0(gsub("\\.","/",gsub("X","",colnames(a1))),"/01"))
+  a1=as.data.frame(t(a1))
+  a1$Date=as.Date(Dates_fates)
+  a1$Tissue<-c(rep(1,66430/13),rep(2,66430/13),rep(3,66430/13),rep(4,66430/13),
+               rep(5,66430/13),rep(6,66430/13),rep(7,66430/13),rep(8,66430/13),
+               rep(9,66430/13),rep(10,66430/13),rep(11,66430/13),rep(12,66430/13),rep(13,66430/13))
+  a1=melt(a1,id=c("Date","Tissue"))
+  colnames(a1)=c("Date","Tissue","Replicate","Variable")
+  return(a1)
+}
+LWP<-ProctoDF_NCSF(var.res.arr)
+
+```
+
+```{r}
+
+wdir<-"C:/Users/345578/Desktop/NGEE_Tropics_data/"
+
+plot(seq(0,-10,-.01),Leaf_Vuln_Curve(seq(0,-10,-.01),1.6387,1.2543))
+Observed<-data.frame(LWP_round=seq(0,-10,-.01),K_obs=Leaf_Vuln_Curve(seq(0,-10,-.01),1.6387,1.2543))              
+```
+
+```{r}
+load(file.path("C:/Users/345578/Documents/GitHub/Transfer_HPC/FATES_LWP_SCPF.h1.extract.Rdata"))
+LWP<-ProctoDF_NCSF(var.res.arr)
+
+load(file.path("C:/Users/345578/Documents/GitHub/Transfer_HPC/C_STOMATA.h1.extract.Rdata"))
+C_STOMATA<-ProctoDF(var.res.arr)#'mean stomatal conductance' 'umol m-2 s-1'
+Grouped<-LWP %>%group_by(Date,Replicate)%>%summarise(Mean_LWP=min(Variable))
+Joined<-merge(Grouped,C_STOMATA,by=c("Date","Replicate"))
+Joined$HydraulicCond<-Joined$Variable/10000
+```
+
+
+
+```{r}
+runs<-unique(Joined$Replicate)
+
+for(i in 1:length(runs)){
+  subs<-Joined[Joined$Replicate==runs[i],]
+  subs$LWP_round<-round(subs$Mean_LWP,2)
+  Joined_obs<-merge(subs,Observed,by='LWP_round',all.x =T)
+  Joined_obs$K_obs[is.na(Joined_obs$K_obs)]<-0.0
+  m1<-lm(Joined_obs$HydraulicCond~Joined_obs$K_obs)
+  output=data.frame(run=runs[i],r2=summary(m1)$r.squared)
+  if(i==1){output_df=output}else(
+  output_df=rbind(output_df,output))
+}
+
+```
+
+
+```{r}
+best=output_df$run[output_df$r2==max(output_df$r2)]
+best_df=Joined[Joined$Replicate==best,]
+ggplot()+
+  geom_line(aes(x=Mean_LWP,y=HydraulicCond,fill=Replicate,color=Replicate),dat=Joined,wd=1.0,type="points")+
+  geom_line(aes(x=LWP_round, y=K_obs, fill='black'), Observed,lwd=2.0)+
+  geom_line(aes(x=Mean_LWP, y=HydraulicCond, fill=alpha('green',0.5)), dat=best_df)+
+  theme_classic()
+```
+
+
+
+```{r}
+
+theme_set(theme_bw())
+theme_update(text = element_text(size=14),
+             panel.grid.major.y = element_blank(),
+             panel.grid.minor.y = element_blank(),
+             strip.background = element_blank())
+```
+
+```{r}
+##***************************
+#### Load Observed soil moisture and ET -------
+###***************************
+data_dir<-"C:/Users/345578/Desktop/BCI/Val_data/"
+load(file.path(paste0(data_dir,"avasoilmoisture/vertical.rda")))
+load(file.path(paste0(data_dir,"avasoilmoisture/horizontal.rda")))
+load(file.path(paste0(data_dir,"bci.hydromet/forcings.rda")))
+###***************************
+```
+
+```{r}
+setwd('C:/Users/345578/Desktop/BCI/')
+params <- read.table(file.path("new_HYDRAULICTRAITS.FAST.Sam"), header = TRUE)[1:100,]
+dim(params); str(params)
+total.n <- nrow(params)
+filterFile <- read.table(file.path("Filter_BCI67.txt"))
+nrow(filterFile)
+
+col1 <- c("Observed" = alpha("black",0.7),
+          "Observed Point Location" = alpha("black",0.7), 
+          "Simulated" = alpha("green",0.7),
+          "Best-fit RMSE" = alpha("#d95f02",0.7))
+          
+          # "Observed Plot-wide" = alpha("black",0.7),
+          # 
+          # "Observed Plot-wide" = alpha("black",0.7),
+          # , "Observed Gap-filled" = alpha("purple",0.7), 
+          # "Best-fit NSE" =alpha( "green",0.7), "Best-fit R-squared" = alpha("purple",0.7), 
+          # "Observed at Ava-Tower" = alpha("#f04546",0.7))
+
+params <- params %>% mutate(par.sam = 1:total.n)
+par.sam.on <- params$par.sam[filterFile$V1 == TRUE]
+par.on <- params %>% subset(par.sam %in% par.sam.on) #; params[filterFile$V1, ] does not work
+nsam <- length(par.on$par.sam) #length(which(filterFile$V1 == TRUE))
+
+rmse.table <- data.frame(par.sam = par.on$par.sam, "qrunoff_daily" = rep(NA, nsam), "qrunoff_yearly" = rep(NA, nsam))
+rsq.table <- data.frame(par.sam = par.on$par.sam, "qrunoff_daily" = rep(NA, nsam), "qrunoff_yearly" = rep(NA, nsam))
+nse.table <- data.frame(par.sam = par.on$par.sam, "qrunoff_daily" = rep(NA, nsam), "qrunoff_yearly" = rep(NA, nsam))
+###
+load(file.path("extract_6_7/QRUNOFF.h1.extract.Rdata"))
+mod.qrunoff.d <- setDT(as.data.frame(t(var.res.arr[[1]])), keep.rownames = "date") %>%
+  mutate(date = as.Date(date))
+data<-as.data.frame(lapply(mod.qrunoff.d[,-1],function(x)(x*24*60*60/3)))
+mod.qrunoff.d<-cbind(mod.qrunoff.d[,1],data)
+obs.qrunoff.d <- forcings %>% select(date, flow_conrad) %>% # in mm/day
+  dplyr::rename(obs = flow_conrad) %>% subset(date > min(mod.qrunoff.d$date, na.rm = TRUE))
+
+qrunoff.d <- obs.qrunoff.d %>% full_join(mod.qrunoff.d, by = "date")
+#head(qrunoff.d); #summary(qrunoff.d)
+rm(var.res.arr) # large file
+# letting four years pass to allow for model initialisation before model-obs comparison
+qrunoff.d.sub <- qrunoff.d %>% subset(date >= c(min(date, na.rm = TRUE) + 365*4 + 1))
+
+for (i in 1: nsam) {
+
+  obs <- as.numeric(qrunoff.d.sub$obs);
+  sim <- as.numeric(qrunoff.d.sub[, i + 2])
+  correlation <- cor(obs, sim, use = "complete.obs", method = "pearson")
+  
+  par.sam.mod <- as.numeric(gsub("X","",colnames(qrunoff.d[i + 2])))# same for all other tables
+  print(par.sam.mod)
+  row.sam <- which(nse.table$par.sam == par.sam.mod) ## same for rmse
+  
+  rmse.table$qrunoff_daily[row.sam] <- round(as.numeric(mean((sim - obs)^2, na.rm = TRUE)^0.5), 3)
+  rsq.table$qrunoff_daily[row.sam] <- round(as.numeric(correlation)^2, 3)
+  ## not computing efficiency when observed variable was zero
+  obs.drop0 <- obs[!obs == 0]; sim.drop0 <- sim[!obs == 0]
+  # NSE = 1 - ( sum( (obs - sim)^2 ) / sum( (obs - mean(obs))^2 )
+  nse.table$qrunoff_daily[row.sam] <- NSE(obs.drop0, sim.drop0, na.rm = TRUE) 
+}
+
+summary(rsq.table); summary(nse.table); summary(rmse.table)
+nse.best.run.d <- max(nse.table$qrunoff_daily, na.rm = TRUE) 
+rmse.best.run.d <- min(rmse.table$qrunoff_daily, na.rm = TRUE)
+rsq.best.run.d <- max(rsq.table$qrunoff_daily, na.rm = TRUE)
+best.rmse.par.n.run.d <- rmse.table$par.sam[which(rmse.table$qrunoff_daily == rmse.best.run.d)]
+best.rsq.par.n.run.d <- rsq.table$par.sam[which(rsq.table$qrunoff_daily == rsq.best.run.d)]
+
+## rsq for the ensemble with max nse
+rsq.for.best.rmse.run.d <- rsq.table$qrunoff_daily[which(rmse.table$qrunoff_daily == rmse.best.run.d)]
+
+qrunoff.d.long <- gather(qrunoff.d.sub, key = "par.sam", "value", -date, -obs)          
+qrunoff.d.long$par.sam<-gsub("X","",qrunoff.d.long$par.sam)
+```
+####--------
+#### Annual
+####--------
+## also finding which sim gives best annual sums
+## need to account for missing data
+
+```{r}
+qrunoff.d.long.sum <- qrunoff.d.long %>% 
+  mutate(year = format(date, "%Y"),
+         value.na = if_else(is.na(obs), obs, value)) %>%
+  group_by(year, par.sam) %>%
+  summarise_at(vars(obs, value.na), sum, na.rm = TRUE)
+qrunoff.d.sum <- spread(qrunoff.d.long.sum, key = "par.sam", value = "value.na") %>% as.data.frame()
+
+qrunoff.d.long.sum %>%
+  group_by(year) %>%
+  summarise_at(vars(obs, value.na), mean, na.rm = TRUE)
+
+for (i in 1: nsam) {
+  obs <- as.numeric(qrunoff.d.sum$obs);
+  sim <- as.numeric(qrunoff.d.sum[, i + 2])
+  correlation <- cor(obs, sim, use = "complete.obs", method = "pearson")
+  
+  par.sam.mod <-as.numeric(gsub("X","",colnames(qrunoff.d[i + 2]))) # same for all other tables
+  row.sam <- which(nse.table$par.sam == par.sam.mod) ## same for rmse
+  
+  rmse.table$qrunoff_yearly[row.sam] <- round(as.numeric(mean((sim - obs)^2, na.rm = TRUE)^0.5), 3)
+  rsq.table$qrunoff_yearly[row.sam] <- round(as.numeric(correlation)^2, 3)
+  ## not computing efficiency when observed variable was zero
+  obs.drop0 <- obs[!obs == 0]; sim.drop0 <- sim[!obs == 0]
+  # NSE = 1 - ( sum( (obs - sim)^2 ) / sum( (obs - mean(obs))^2 )
+  nse.table$qrunoff_yearly[row.sam] <- NSE(obs.drop0, sim.drop0, na.rm = TRUE) 
+}
+summary(rsq.table); summary(nse.table); summary(rmse.table)
+nse.best.run.y <- max(nse.table$qrunoff_yearly, na.rm = TRUE) 
+rmse.best.run.y <- min(rmse.table$qrunoff_yearly, na.rm = TRUE)
+rsq.best.run.y <- max(rsq.table$qrunoff_yearly, na.rm = TRUE)
+best.rmse.par.n.run.y <- rmse.table$par.sam[which(rmse.table$qrunoff_yearly == rmse.best.run.y)]
+best.rsq.par.n.run.y <- rsq.table$par.sam[which(rsq.table$qrunoff_yearly == rsq.best.run.y)]
+## rsq for the ensemble with max nse
+rsq.for.best.rmse.run.y <- rsq.table$qrunoff_yearly[which(rmse.table$qrunoff_yearly == rmse.best.run.y)]
+qrunoff.d.long.sum %>% subset(par.sam == best.rmse.par.n.run.y)
+```
+
+```{r}
+
+p.qrun.d.1 <- ggplot(qrunoff.d.long,
+                     aes(x = date, y = value)) +
+  geom_line(aes(group = par.sam, color = "Simulated"), show.legend = F, size = 0.1) +
+  scale_colour_manual(name = "", values = col1) +
+  geom_line(aes(y = obs, colour = "Observed"), size = 0.5) +
+  ylab("QRUNOFF [mm/day]") +
+  xlab("Date") + 
+  theme(legend.text = element_text(size = 16, face = "plain"),
+        legend.position = c(0.8, 0.7), legend.background = element_rect(fill = "transparent")) +
+  scale_x_date(date_breaks = "1 year", labels = function(x) format(x, "%b%y"))
+p.qrun.d <- p.qrun.d.1 + 
+  geom_line(data = qrunoff.d.long %>% subset(par.sam %in% best.rmse.par.n.run.d), 
+            aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_text(data = qrunoff.d.long %>% subset(par.sam %in% best.rsq.par.n.run.d),
+            aes(x = min(date) + 700, y = Inf, label = 
+                  as.character(paste0("RMSE.best = ", round(rmse.best.run.d, 2), 
+                                      "; R-squared = ", round(max(rsq.for.best.rmse.run.d, na.rm = TRUE), 2), 
+                                      "\n NSE.best = ", round(nse.best.run.d, 2)))),vjust = 2)+
+                                      #"\n; R-squared = ", round(max(rsq.for.best.rmse.run.y, na.rm = TRUE), 2),
+                                      #"\n R-squared.best = ", round(rsq.best.run.d, 2),
+                                      #"\n RMSE best annual = ", round(rmse.best.run.y, 2),
+                                      #"\n R-squared.best annual = ", round(rsq.best.run.y, 2)))),vjust = 2)+
+  ggtitle("QRUNOFF: Observed vs Simulated_Daily")
+p.qrun.d 
+
+ggsave("QRUNOFF_Obs_vs_model_daily.jpeg", plot = p.qrun.d, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+
+
+```
+
+```{r}
+
+p.qrun.y <- p.qrun.d.1 + 
+  geom_line(data = qrunoff.d.long %>% subset(par.sam %in% best.rmse.par.n.run.y), 
+            aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_text(data = qrunoff.d.long %>% subset(par.sam %in% best.rmse.par.n.run.y),
+            aes(x = min(date) + 700, y = Inf, label = 
+                  as.character(paste0("RMSE.best = ", round(rmse.best.run.y, 2), "; R-squared = ", round(max(rsq.for.best.rmse.run.y, na.rm = TRUE), 2), 
+                                      "\n R-squared.best = ", round(rsq.best.run.y, 2)))), vjust = 2) +
+  ggtitle("QRUNOFF: Observed vs Simulated_Daily: annual sum best-fit")
+
+
+
+p.qrun.y
+ggsave("QRUNOFF_Obs_vs_model_daily_yearly.jpeg", plot = p.qrun.y, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+
+
+```
+
+#--------------
+####
+#### Evapotranspiration: Obs versus model #-------
+####
+# Daily #------
+####
+```{r}
+setwd('C:/Users/345578/Desktop/BCI/')
+load(file.path("extract_6_7/QVEGE.h1.extract.Rdata"))
+mod.qvege.d <- setDT(as.data.frame(t(var.res.arr[[1]])), keep.rownames = "date") # in mm/s
+load(file.path("extract_6_7/QVEGT.h1.extract.Rdata"))
+mod.qvegt.d <- setDT(as.data.frame(t(var.res.arr[[1]])), keep.rownames = "date") # in mm/s
+load(file.path("extract_6_7/QSOIL.h1.extract.Rdata"))
+mod.qsoil.d <- setDT(as.data.frame(t(var.res.arr[[1]])), keep.rownames = "date") # in mm/s
+rm(var.res.arr) # large file
+```
+
+
+```{r}
+## combining evaporation from soil and plants and transpiration from plants
+flow.columns <- (mod.qvege.d[, -1] + mod.qvegt.d[, -1] + mod.qsoil.d[, -1])*24*60*60 # from mm/s to mm/day
+mod.qet.d <-  cbind.data.frame(mod.qvege.d[, 1], flow.columns) %>% 
+  mutate(date = as.Date(date))
+## Observed ET from flux tower
+# AET.flag.day has NAs substituted where insufficient (< 50%) actual data for the day
+obs.qet.d <- forcings %>% select(date, AET, AET.flag.day) %>% # in mm/day
+  dplyr::rename(obs = AET.flag.day, 
+         obs.2 = AET) %>% # this is gap filled AET 
+  subset(date > "2012-07-02" & date < "2017-09-01") ## date after which ET data is present
+head(obs.qet.d)
+## for sma calculation
+n.month <- length(unique(format(obs.qet.d$date[!is.na(obs.qet.d$obs)], format = "%Y-%m")))
+df.factor <- 1
+set.order <- 21 ## how many days to average over
+obs.sma <- smooth::sma(obs.qet.d$obs.2, order = set.order)
+obs.qet.d$obs.sma <- as.numeric(obs.sma$fitted) 
+# joining obs with mod
+qet.d <- obs.qet.d %>% full_join(mod.qet.d, by = "date") 
+# letting four years pass to allow for model initialisation before model-obs comparison; 
+# does not have to be done for ET because observed ET is 3.5 years ahead of the run start date, which is 2008-01-1
+qet.d.sub <- qet.d %>% subset(date >= c(min(mod.qet.d$date, na.rm = TRUE) + 365*4 + 1))
+
+dates.valid.to.compare <- seq.Date(from = c(min(qet.d.sub$date, na.rm = TRUE) + 30), to =  c(max(qet.d.sub$date, na.rm = TRUE) - 30), by = "day")
+
+rsq.table$qet_daily <- NA
+rmse.table$qet_daily <- NA
+nse.table$qet_daily <- NA
+# qet.sma.sub <- qet.sma %>% subset(date %in% dates.valid.to.compare)
+
+for (i in 1: nsam) {
+  
+  obs <- as.numeric(qet.d.sub$obs); sim <- as.numeric(qet.d.sub[, i + 4])
+  sim<-sim[!is.na(obs)]
+  obs<-obs[!is.na(obs)]
+  #obs <- as.numeric(qet.sma.sub$obs.sma); sim <- as.numeric(qet.sma.sub[, i + 4])
+  correlation <- cor(obs, sim, use = "complete.obs", method = "pearson")
+  
+  par.sam.mod <- as.numeric(colnames(qet.d.sub[i + 4])) # same for all other tables
+  row.sam <- which(nse.table$par.sam == par.sam.mod) ## same for rmse
+  
+  rmse.table$qet_daily[row.sam] <- round(as.numeric(mean((sim - obs)^2, na.rm = TRUE))^0.5, 3)
+  rsq.table$qet_daily[row.sam] <- round(as.numeric(correlation)^2, 3)
+  ## not computing efficiency when observed variable was zero
+  obs.drop0 <- obs[!obs == 0]; sim.drop0 <- sim[!obs == 0]
+  # NSE = 1 - ( sum( (obs - sim)^2 ) / sum( (obs - mean(obs))^2 )
+  nse.table$qet_daily[row.sam] <- NSE(obs.drop0, sim.drop0, na.rm = TRUE) 
+}
+#summary(rmse.table); summary(nse.table); summary(rsq.table)
+
+nse.best.et.d <- max(nse.table$qet_daily, na.rm = TRUE)
+rmse.best.et.d <- min(rmse.table$qet_daily, na.rm = TRUE)
+rsq.best.et.d <- max(rsq.table$qet_daily, na.rm = TRUE)
+# max.par.n.et.row.d <- c(which(nse.table$qet_daily == nse.best.et.d), which(rsq.table$qet_daily == rsq.best.et.d))
+nse.best.par.n.et.d <- nse.table$par.sam[which(nse.table$qet_daily == nse.best.et.d)]
+rsq.best.par.n.et.d <- nse.table$par.sam[which(rsq.table$qet_daily == rsq.best.et.d)]
+rmse.best.par.n.et.d <- rmse.table$par.sam[which(rmse.table$qet_daily == rmse.best.et.d)]
+
+## rsq for the ensemble with max rmse
+rsq.for.best.rmse.et.d <- rsq.table$qet_daily[which(rmse.table$qet_daily == rmse.best.et.d)]
+top.quant <- 0.95 # 
+top.par.n.et.d <- unique(rsq.table$par.sam[rsq.table$qet_daily > as.numeric(quantile(rsq.table$qet_daily, prob = top.quant, na.rm = TRUE))],
+                         rmse.table$par.sam[rmse.table$qet_daily > as.numeric(quantile(rmse.table$qet_daily, prob = top.quant, na.rm = TRUE))])
+
+# qet.d.long <- gather(qet.d.sub, key = "par.sam", "value", -date, -obs, -obs.2)
+qet.d.long <- gather(qet.d.sub, key = "par.sam", "value", -date, -obs, -obs.2, -obs.sma)
+```
+### Monthly 
+
+```{r}
+
+qet.d.long.sum <- qet.d.long %>% 
+  subset(date >= as.Date(min(obs.qet.d$date)) & date < as.Date(max(obs.qet.d$date)) + 1) %>%
+  mutate(year = format(date, "%Y"),
+         month = format(date, "%m"),
+         value.na = if_else(is.na(obs), obs, value)
+         ) %>%
+  group_by(year,month, par.sam) %>%
+  summarise_at(vars(obs, value.na), sum, na.rm = TRUE)
+qet.d.sum <- spread(qet.d.long.sum, key = "par.sam", value = "value.na") %>% as.data.frame()
+qet.d.long.sum %>%
+  group_by(year,month) %>%
+  summarise_at(vars(obs, value.na), mean, na.rm = TRUE)
+
+rsq.table$qet_monthly <- NA; rmse.table$qet_monthly <- NA; nse.table$qet_monthly <- NA
+for (i in 1: nsam) {
+  obs <- as.numeric(qet.d.sum$obs)[-6]; sim <- as.numeric(qet.d.sum[, i + 2])[-6]
+  correlation <- cor(obs, sim, use = "complete.obs", method = "pearson")
+  
+  par.sam.mod <- as.numeric(colnames(qet.d.sum[i + 2])) # same for all other tables
+  row.sam <- which(nse.table$par.sam == par.sam.mod) ## same for rmse
+  
+  rmse.table$qet_monthly[row.sam] <- round(as.numeric(mean((sim - obs)^2, na.rm = TRUE))^0.5, 3)
+  rsq.table$qet_monthly[row.sam] <- round(as.numeric(correlation)^2, 3)
+  ## not computing efficiency when observed variable was zero
+  obs.drop0 <- obs[!obs == 0]; sim.drop0 <- sim[!obs == 0]
+  # NSE = 1 - ( sum( (obs - sim)^2 ) / sum( (obs - mean(obs))^2 )
+  nse.table$qet_monthly[row.sam] <- NSE(obs.drop0, sim.drop0, na.rm = TRUE) 
+}
+
+summary(rmse.table); summary(nse.table); summary(rsq.table)
+
+qet.d.long <- qet.d.long %>% subset(date >= as.Date(min(obs.qet.d$date)) & date < as.Date(max(obs.qet.d$date)) + 1) %>% droplevels() %>%
+  mutate(obs.3 = if_else(is.na(obs), obs.2, obs))
+qet.d.long.sub <- qet.d.long %>% 
+  subset(par.sam %in% c(top.par.n.et.d, rmse.best.par.n.et.d, rsq.best.par.n.et.d, nse.best.par.n.et.d))
+qet.d.long.sub.best.fit.nse <- qet.d.long.sub %>% subset(par.sam %in% nse.best.par.n.et.d)
+qet.d.long.sub.best.fit.rmse <- qet.d.long.sub %>% subset(par.sam %in% rmse.best.par.n.et.d)
+qet.d.long.sub.best.fit.rsq <- qet.d.long.sub %>% subset(par.sam %in% rsq.best.par.n.et.d)
+
+
+
+nse.best.et.m <- max(nse.table$qet_monthly, na.rm = TRUE)
+rmse.best.et.m <- min(rmse.table$qet_monthly, na.rm = TRUE)
+rsq.best.et.m<- max(rsq.table$qet_monthly, na.rm = TRUE)
+# max.par.n.et.row.y <- c(which(nse.table$qet_yearly == nse.best.et.y), which(rsq.table$qet_yearly == rsq.best.et.y))
+nse.best.par.n.et.m <- nse.table$par.sam[which(nse.table$qet_monthly == nse.best.et.m)]
+rsq.best.par.n.et.m <- nse.table$par.sam[which(rsq.table$qet_monthly == rsq.best.et.m)]
+rmse.best.par.n.et.m <- rmse.table$par.sam[which(rmse.table$qet_monthly == rmse.best.et.m)]
+## rsq for the ensemble with max rmse
+rsq.for.best.rmse.et.m <- rsq.table$qet_monthly[which(rmse.table$qet_monthly == rmse.best.et.m)]
+
+```
+
+####--------
+#### Annual
+####--------
+## also finding which sim gives best annual sums
+## need to account for missing data 
+
+
+```{r}
+
+qet.d.long.sum <- qet.d.long %>% 
+  subset(date >= as.Date(min(obs.qet.d$date)) & date < as.Date(max(obs.qet.d$date)) + 1) %>%
+  mutate(year = format(date, "%Y"),
+         value.na = if_else(is.na(obs), obs, value)) %>%
+  group_by(year, par.sam) %>%
+  summarise_at(vars(obs, value.na), sum, na.rm = TRUE)
+qet.d.sum <- spread(qet.d.long.sum, key = "par.sam", value = "value.na") %>% as.data.frame()
+
+qet.d.long.sum %>%
+  group_by(year) %>%
+  summarise_at(vars(obs, value.na), mean, na.rm = TRUE)
+
+rsq.table$qet_yearly <- NA; rmse.table$qet_yearly <- NA; nse.table$qet_yearly <- NA
+for (i in 1: nsam) {
+  obs <- as.numeric(qet.d.sum$obs)[-6]; sim <- as.numeric(qet.d.sum[, i + 2])[-6]
+  correlation <- cor(obs, sim, use = "complete.obs", method = "pearson")
+  
+  par.sam.mod <- as.numeric(colnames(qet.d.sum[i + 2])) # same for all other tables
+  row.sam <- which(nse.table$par.sam == par.sam.mod) ## same for rmse
+  
+  rmse.table$qet_yearly[row.sam] <- round(as.numeric(mean((sim - obs)^2, na.rm = TRUE))^0.5, 3)
+  rsq.table$qet_yearly[row.sam] <- round(as.numeric(correlation)^2, 3)
+  ## not computing efficiency when observed variable was zero
+  obs.drop0 <- obs[!obs == 0]; sim.drop0 <- sim[!obs == 0]
+  # NSE = 1 - ( sum( (obs - sim)^2 ) / sum( (obs - mean(obs))^2 )
+  nse.table$qet_yearly[row.sam] <- NSE(obs.drop0, sim.drop0, na.rm = TRUE) 
+}
+summary(rmse.table); summary(nse.table); summary(rsq.table)
+
+nse.best.et.y <- max(nse.table$qet_yearly, na.rm = TRUE)
+rmse.best.et.y <- min(rmse.table$qet_yearly, na.rm = TRUE)
+rsq.best.et.y<- max(rsq.table$qet_yearly, na.rm = TRUE)
+# max.par.n.et.row.y <- c(which(nse.table$qet_yearly == nse.best.et.y), which(rsq.table$qet_yearly == rsq.best.et.y))
+nse.best.par.n.et.y <- nse.table$par.sam[which(nse.table$qet_yearly == nse.best.et.y)]
+rsq.best.par.n.et.y <- nse.table$par.sam[which(rsq.table$qet_yearly == rsq.best.et.y)]
+rmse.best.par.n.et.y <- rmse.table$par.sam[which(rmse.table$qet_yearly == rmse.best.et.y)]
+## rsq for the ensemble with max rmse
+rsq.for.best.rmse.et.y <- rsq.table$qet_yearly[which(rmse.table$qet_yearly == rmse.best.et.y)]
+
+qet.d.long <- qet.d.long %>% subset(date >= as.Date(min(obs.qet.d$date)) & date < as.Date(max(obs.qet.d$date)) + 1) %>% droplevels() %>%
+  mutate(obs.3 = if_else(is.na(obs), obs.2, obs))
+qet.d.long.sub <- qet.d.long %>% 
+  subset(par.sam %in% c(top.par.n.et.d, rmse.best.par.n.et.d, rsq.best.par.n.et.d, nse.best.par.n.et.d))
+qet.d.long.sub.best.fit.nse <- qet.d.long.sub %>% subset(par.sam %in% nse.best.par.n.et.d)
+qet.d.long.sub.best.fit.rmse <- qet.d.long.sub %>% subset(par.sam %in% rmse.best.par.n.et.d)
+qet.d.long.sub.best.fit.rsq <- qet.d.long.sub %>% subset(par.sam %in% rsq.best.par.n.et.d)
+```
+ 
+ 
+```{r}
+p.et1.label.text.d <- geom_text(aes(x = min(date) + 700, y = Inf, label = 
+                                      as.character(paste0("RMSE.best = ", round(rmse.best.et.d, 2), "; R-squared = ", round(max(rsq.for.best.rmse.et.d, na.rm = TRUE), 2),
+                                                          "\n R-squared.best = ", round(rsq.best.et.d, 2)))), vjust = 2)
+p.et1.label.text.y <- geom_text(aes(x = min(date) + 700, y = Inf, label = 
+                                      as.character(paste0("RMSE.best = ", round(rmse.best.et.y, 2),  "; R-squared = ", round(max(rsq.for.best.rmse.et.y, na.rm = TRUE), 2),
+                                                          "\n R-squared.best = ", round(rsq.best.et.y, 2)))), vjust = 2)
+
+p.et1 <- ggplot(qet.d.long.sub,
+                aes(x = date, y = value)) +
+  # geom_line(aes(group = par.sam, color = "Simulated"), show.legend = F, size = 0.1) +
+  scale_colour_manual(name = "", values = col1) +
+  ylab("ET [mm/day]") +
+  xlab("Date") + 
+  ylim(0,9)+
+  theme(axis.text = element_text(size = 14, face = "plain"),
+        legend.text = element_text(size = 12, face = "plain"),
+        plot.margin = margin(5.1, 4.1, 4.1, 2.1, "pt"),
+        plot.title = element_text(hjust = 0.5, size = 14, face = "plain"),
+        legend.position = c(0.8, 0.8), legend.background = element_rect(fill = "transparent")) +
+  scale_x_date(date_breaks = "1 year", labels = function(x) format(x, "%b%y")) 
+
+p.et1.a.d <- p.et1 + 
+  geom_line(data = qet.d.long.sub.best.fit.rmse, aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_line(data = qet.d.long.sub.best.fit.rsq, aes(group = par.sam, color = "Best-fit R-squared"), show.legend = F, size = 0.5) +
+  geom_line(aes(x= date, y = obs.2, color = "Observed"), size = 0.5) + 
+  p.et1.label.text.d + 
+  ggtitle("Evapotranspiration: Observed vs Simulated_Daily")
+p.et1.b.d <- p.et1 + 
+  geom_line(data = qet.d.long.sub.best.fit.rmse, aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_line(data = qet.d.long.sub.best.fit.rsq, aes(group = par.sam, color = "Best-fit R-squared"), show.legend = F, size = 0.5) +
+  geom_line(aes(x= date, y = obs, color = "Observed"), size = 0.5) + 
+  p.et1.label.text.d + 
+  ggtitle("Evapotranspiration: Observed vs Simulated_Daily")
+
+p.et1.b.d
+
+ggsave("ET_Obs_vs_model_daily_all_years_with_gaps.jpeg", plot = p.et1.b.d, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+```
+#### Using Annual best-fits
+```{r}
+
+p.et1.a.y <- p.et1 + 
+  geom_line(data = qet.d.long %>% subset(par.sam %in% rsq.best.par.n.et.y), aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_line(aes(x= date, y = obs.2, color = "Observed"), size = 0.5) + 
+  p.et1.label.text.y + 
+  ggtitle("Evapotranspiration: Observed vs Simulated_Daily: annual sum best-fit")
+ggsave("ET_Obs_vs_model_daily_all_years_yearly.jpeg", plot = p.et1.a.y, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+p.et1.b.y <- p.et1 + 
+  geom_line(data = qet.d.long %>% subset(par.sam %in% rmse.best.par.n.et.y), aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_line(aes(x= date, y = obs, color = "Observed"), size = 0.5) + 
+  p.et1.label.text.y + 
+  ggtitle("Evapotranspiration: Observed vs Simulated_Daily: annual sum best-fit")
+
+p.et1.b.y
+
+ggsave("ET_Obs_vs_model_daily_all_years_with_gaps_yearly.jpeg", plot = p.et1.b.y, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+```
+
+```{r}
+
+p.et1.a.y <- p.et1 + 
+  geom_line(data = qet.d.long %>% subset(par.sam %in% rmse.best.par.n.et.y), aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_line(aes(x= date, y = obs.2, color = "Observed"), size = 0.5) + 
+  p.et1.label.text.y + 
+  ggtitle("Evapotranspiration: Observed vs Simulated_Daily: annual sum best-fit")
+ggsave("ET_Obs_vs_model_daily_all_years_yearly.jpeg", plot = p.et1.a.y, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+p.et1.b.y <- p.et1 + 
+  geom_line(data = qet.d.long %>% subset(par.sam %in% rmse.best.par.n.et.y), aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_line(aes(x= date, y = obs, color = "Observed"), size = 0.5) + 
+  p.et1.label.text.y + 
+  ggtitle("Evapotranspiration: Observed vs Simulated_Daily: annual sum best-fit")
+
+p.et1.b.y
+
+ggsave("ET_Obs_vs_model_daily_all_years_with_gaps_yearly.jpeg", plot = p.et1.b.y, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+```
+
+### Monthly plot
+```{r}
+p.et1.label.text.m <- geom_text(aes(x = min(date) + 700, y = Inf, label = 
+                                      as.character(paste0("RMSE.best = ", round(rmse.best.et.m, 2),  "; R-squared = ", round(max(rsq.for.best.rmse.et.m, na.rm = TRUE), 2),
+                                                          "\n R-squared.best = ", round(rsq.best.et.m, 2)))), vjust = 2)
+p.et1.a.m <- p.et1 + 
+  geom_line(data = qet.d.long %>% subset(par.sam %in% rsq.best.par.n.et.m), aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_line(aes(x= date, y = obs.2, color = "Observed"), size = 0.5) + 
+  p.et1.label.text.m + 
+  ggtitle("Evapotranspiration: Observed vs Simulated: monthly sum best-fit")
+
+p.et1.a.m 
+
+ggsave("ET_Obs_vs_model_daily_all_years_yearly.jpeg", plot = p.et1.a.y, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+
+p.et1.b.m <- p.et1 + 
+  geom_line(data = qet.d.long %>% subset(par.sam %in% rmse.best.par.n.et.m), aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_line(aes(x= date, y = obs, color = "Observed"), size = 0.5) + 
+  p.et1.label.text.m + 
+  ggtitle("Evapotranspiration: Observed vs Simulated: monthly sum best-fit")
+
+
+
+
+p.et1.a.m
+
+ggsave("ET_Obs_vs_model_daily_all_years_with_gaps_yearly.jpeg", plot = p.et1.b.y, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+```
+
+#### GPP
+### 
+
+
+
+```{r}
+
+setwd('C:/Users/345578/Desktop/BCI/')
+
+load(file.path("extract_6_7/GPP.h1.extract.Rdata"))
+
+mod.gpp.d <- setDT(as.data.frame(t(var.res.arr[[1]])), keep.rownames = "date") %>%
+  mutate(date = as.Date(date)) %>%
+  as.data.frame()
+mod.gpp.d[, -1] <- mod.gpp.d[, -1]*24*60*60 # converting from gC/m^2/s to gC/m^2/d
+summary(mod.gpp.d[, 1:3])
+
+rm(var.res.arr) # large file
+bci.tower <- read.csv("C:/Users/345578/Desktop/BCI/Val_data/doi_10.5061_dryad.3tx95x6j5__v3/BCI_v5.1.csv", header = TRUE)
+bci.tower <- as.data.frame(bci.tower)
+colnames(bci.tower)
+bci.tower$datetime <- strptime(bci.tower$date, format = "%Y-%m-%d %H:%M")
+bci.tower$datetime <- as.POSIXct(bci.tower$datetime, format = "%Y-%m-%d %H:%M:%S", tz = "")
+str(bci.tower$datetime)
+
+obs.gpp.d <- bci.tower %>% select(datetime, gpp) %>% # in mumol/m2/2: units must be mumol/m2/s
+  mutate(date = as.Date(format(datetime, "%Y-%m-%d")),  
+         gpp.mumol = as.numeric(as.character(gpp))) %>%
+  group_by(date) %>% summarise(obs = mean(gpp.mumol, na.rm = T)) %>%
+  mutate(obs = obs*12*1e-06*24*60*60) %>% # gC/m2/d %>%
+  subset(date != is.na(date))
+# mutate(obs = as.numeric(bigleaf::umolCO2.to.gC(obs))) ## gives the same result #-------
+# gC/m^2/d
+# to convert mumol/m2/s to gC/m^2/d
+# Cmol*mumol2mol*kg2g/days2seconds 
+# constants	Cmol - molar mass of carbon (kg mol-1) 
+# umol2mol - conversion micromole (umol) to mol (mol) 
+# kg2g - conversion kilogram (kg) to gram (g) 
+# days2seconds - seconds per day
+# mean gpp.mumol = 10696 in mumol/m2/s #----
+# so mean gpp in gC/m^2/d
+# conversion.eq : 
+summary(obs.gpp.d)
+gpp.d <- obs.gpp.d %>% full_join(mod.gpp.d, by = "date") %>% as.data.frame()
+head(gpp.d[, 1:6]); summary(gpp.d[, 1:6])
+# letting four years pass to allow for model initialisation before model-obs comparison
+gpp.d.sub <- gpp.d %>% subset(date >= c(min(date, na.rm = TRUE) + 365*4 + 1))
+gpp.d.long <- gather(gpp.d, key = "par.sam", "value", -date, -obs) 
+## for sma calculation
+n.month <- length(unique(format(obs.gpp.d$date[!is.na(obs.gpp.d$obs)], format = "%Y-%m")))
+df.factor <- 1
+set.order <- 4 ## how many days to average over # smooth::sma(obs.gpp.d$obs)  Model estimated: SMA(4)
+sma.sp <- smooth::sma(obs.gpp.d$obs , order = set.order)
+obs.gpp.d$sma <- as.numeric(sma.sp$fitted) 
+# joining obs with mod
+gpp.d <- obs.gpp.d %>% full_join(mod.gpp.d, by = "date") 
+# letting four years pass to allow for model initialisation before model-obs comparison; 
+# does not have to be done for ET because observed ET is 3.5 years ahead of the run start date, which is 2008-01-1
+gpp.d.sub <- gpp.d %>% subset(date >= c(min(mod.gpp.d$date, na.rm = TRUE) + 365*4 + 1)) %>% as.data.frame()
+
+dates.valid.to.compare <- seq.Date(from = c(min(gpp.d.sub$date, na.rm = TRUE) + 30), to =  c(max(gpp.d.sub$date, na.rm = TRUE) - 30), by = "day")
+gpp.sma <- gpp.d.sub 
+for (i in 1:nsam){
+  sma.i <- smooth::sma(as.vector(gpp.d.sub[, i + 3]), order = set.order)
+  gpp.sma[, i + 3] <- as.numeric(sma.i$fitted)
+}
+gpp.sma.sub <- gpp.sma %>% subset(date %in% dates.valid.to.compare)
+
+rsq.table$gpp_daily <- NA; rmse.table$gpp_daily <- NA; nse.table$gpp_daily <- NA
+
+for (i in 1: nsam) {
+  obs <- as.numeric(gpp.d.sub$obs); sim <- as.numeric(gpp.d.sub[, i + 3])
+  #obs <- as.numeric(gpp.sma.sub$sma); sim <- as.numeric(qet.sma.sub[, i + 3])
+  correlation <- cor(obs, sim, use = "complete.obs", method = "pearson")
+  
+  par.sam.mod <- as.numeric(colnames(gpp.d[i + 3])) # same for all other tables
+  row.sam <- which(nse.table$par.sam == par.sam.mod) ## same for rmse
+  rmse.table$gpp_daily[row.sam] <- round(as.numeric(mean((sim - obs)^2, na.rm = TRUE))^0.5, 3)
+  rsq.table$gpp_daily[row.sam] <- round(as.numeric(correlation)^2, 3)
+  
+  ## not computing efficiency when observed variable was zero
+  obs.drop0 <- obs[!obs == 0]; sim.drop0 <- sim[!obs == 0]
+  # NSE = 1 - ( sum( (obs - sim)^2 ) / sum( (obs - mean(obs))^2 )
+  nse.table$gpp_daily[row.sam] <- NSE(obs.drop0, sim.drop0, na.rm = TRUE) 
+}
+summary(rmse.table); summary(nse.table); summary(rsq.table)
+
+nse.best.gpp.d <- max(nse.table$gpp_daily, na.rm = TRUE); 
+rmse.best.gpp.d <- min(rmse.table$gpp_daily, na.rm = TRUE); 
+rsq.best.gpp.d <- max(rsq.table$gpp_daily, na.rm = TRUE)
+best.rsq.par.n.gpp.d <- rmse.table$par.sam[which(rsq.table$gpp_daily == rsq.best.gpp.d)]
+best.rmse.par.n.gpp.d <- rmse.table$par.sam[which(rmse.table$gpp_daily == rmse.best.gpp.d)]
+
+## rsq for the ensemble with best.rmse
+rsq.for.best.rmse.gpp.d <- rsq.table$gpp_daily[which(rmse.table$gpp_daily == rmse.best.gpp.d)]
+
+gpp.d.long.sub <- gpp.d.long %>% subset(date >= min(obs.gpp.d$date) & date < max(obs.gpp.d$date) + 1)
+gpp.d.long.sub.best.fit.rmse <- gpp.d.long.sub %>% subset(par.sam == best.rmse.par.n.gpp.d)
+gpp.d.long.sub.best.fit.rsq <- gpp.d.long.sub %>% subset(par.sam == best.rsq.par.n.gpp.d)
+
+
+```
+####--------
+#### Annual
+####--------
+## also finding which sim gives best annual sums
+## need to account for missing data, if any
+
+
+```{r}
+
+
+gpp.d.long.sum <- gpp.d.long %>% 
+  subset(date >= as.Date(min(obs.gpp.d$date)) & date < as.Date(max(obs.gpp.d$date) + 1)) %>%
+  mutate(year = format(date, "%Y"),
+         value.na = if_else(is.na(obs), obs, value)) %>%
+  group_by(year, par.sam) %>%
+  summarise_at(vars(obs, value.na), sum, na.rm = TRUE)
+gpp.d.sum <- spread(gpp.d.long.sum, key = "par.sam", value = "value.na") %>% as.data.frame()
+
+gpp.d.long.sum %>%
+  group_by(year) %>%
+  summarise_at(vars(obs, value.na), mean, na.rm = TRUE)
+
+rsq.table$gpp_yearly <- NA; rmse.table$gpp_yearly <- NA; nse.table$gpp_yearly <- NA
+for (i in 1: nsam) {
+  obs <- as.numeric(gpp.d.sum$obs); sim <- as.numeric(gpp.d.sum[, i + 2])
+  correlation <- cor(obs, sim, use = "complete.obs", method = "pearson")
+  
+  par.sam.mod <- as.numeric(colnames(gpp.d.sum[i + 2])) # same for all other tables
+  row.sam <- which(nse.table$par.sam == par.sam.mod) ## same for rmse
+  
+  rmse.table$gpp_yearly[row.sam] <- round(as.numeric(mean((sim - obs)^2, na.rm = TRUE))^0.5, 3)
+  rsq.table$gpp_yearly[row.sam] <- round(as.numeric(correlation)^2, 3)
+  ## not computing efficiency when observed variable was zero
+  obs.drop0 <- obs[!obs == 0]; sim.drop0 <- sim[!obs == 0]
+  # NSE = 1 - ( sum( (obs - sim)^2 ) / sum( (obs - mean(obs))^2 )
+  nse.table$gpp_yearly[row.sam] <- NSE(obs.drop0, sim.drop0, na.rm = TRUE) 
+}
+summary(rmse.table); summary(nse.table); summary(rsq.table)
+
+nse.best.gpp.y <- max(nse.table$gpp_yearly, na.rm = TRUE)
+rmse.best.gpp.y <- min(rmse.table$gpp_yearly, na.rm = TRUE)
+rsq.best.gpp.y <- max(rsq.table$gpp_yearly, na.rm = TRUE)
+# max.par.n.gpp.row.y <- c(which(nse.table$gpp_yearly == nse.best.gpp.y), which(rsq.table$gpp_yearly == rsq.best.gpp.y))
+nse.best.par.n.gpp.y <- nse.table$par.sam[which(nse.table$gpp_yearly == nse.best.gpp.y)]
+rsq.best.par.n.gpp.y <- nse.table$par.sam[which(rsq.table$gpp_yearly == rsq.best.gpp.y)]
+rmse.best.par.n.gpp.y <- rmse.table$par.sam[which(rmse.table$gpp_yearly == rmse.best.gpp.y)]
+## rsq for the ensemble with max rmse
+rsq.for.best.rmse.gpp.y <- rsq.table$gpp_yearly[which(rmse.table$gpp_yearly == rmse.best.gpp.y)]
+
+
+```
+
+
+```{r}
+####--------
+#### Annual End
+####--------
+p.gpp.d1 <- ggplot(gpp.d.long.sub,
+                   aes(x = date, y = value)) +
+  geom_line(aes(group = par.sam, color = "Simulated"), show.legend = F, size = 0.1) +
+  #geom_line(data = gpp.d.long.sub.best.fit.rsq, aes(group = par.sam, color = "Best-fit R-squared"), show.legend = F, size = 0.5) +
+  scale_colour_manual(name = "", values = col1) +
+  geom_line(aes(y = obs, colour = "Observed"), size = 0.5) +
+  ylab("GPP [gC/m^2/d]") +
+  xlab("Date") + 
+  theme(axis.text = element_text(size = 14, face = "plain"),
+        legend.text = element_text(size = 12, face = "plain"),
+        legend.position = c(0.8, 0.9), legend.background = element_rect(fill = "transparent")) +
+  scale_x_date(date_breaks = "1 year", labels = function(x) format(x, "%b%y"))
+
+p.gpp.d <- p.gpp.d1 + 
+  geom_line(data = gpp.d.long.sub.best.fit.rmse, 
+            aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_text(data = gpp.d.long.sub %>% subset(par.sam %in% best.rmse.par.n.gpp.d ),
+            aes(x = min(date) + 700, y = Inf, label = 
+                  as.character(paste0("RMSE.best = ", round(rmse.best.gpp.d, 2), "; R-squared = ", round(max(rsq.for.best.rmse.gpp.d, na.rm = TRUE), 3),
+                                      "\n NSE.best = ", round(nse.best.gpp.d, 2),
+                                      "\n R-squared.max = ", round(rsq.best.gpp.d, 2)))), vjust = 2) +
+  ggtitle("GPP: Observed vs Simulated_Daily")
+ggsave( "GPP_Obs_vs_model_daily.jpeg", plot = p.gpp.d, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+
+p.gpp.d.y <- p.gpp.d1 +
+  geom_line(data = gpp.d.long.sub %>% subset(par.sam %in% rmse.best.par.n.gpp.y), 
+            aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.5) +
+  geom_text(data = gpp.d.long.sub %>% subset(par.sam %in% rmse.best.par.n.gpp.y),
+            aes(x = min(date) + 700, y = Inf, label = 
+                  as.character(paste0("RMSE.best = ", round(rmse.best.gpp.y, 2), "; R-squared = ", round(max(rsq.for.best.rmse.gpp.y, na.rm = TRUE), 2), 
+                                      "\n R-squared.max = ", round(rsq.best.gpp.y, 2)))), vjust = 2) +
+  ggtitle("GPP: Observed vs Simulated_Daily: annual sum best-fit")
+ggsave("GPP_Obs_vs_model_daily_yearly.jpeg", plot = p.gpp.d.y, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 6.25, width = 8.94, units='in')
+rm(p.gpp.y, gppoff.y.long.sub)
+
+p.gpp.d.y
+```
+
+
+
+
+
+
+```{r}
+######
+##### lines and points format
+######
+
+col2 <- c("Observed" = "#f04546", "Observed Gap-filled" = "purple", "Best-fit RMSE" = "black")
+
+p.gpp1 <- ggplot(gpp.d.long.sub.best.fit.rmse, aes(x = date, y = value)) +
+  ylab("GPP [gC/m^2/d]") +
+  xlab("Date") + 
+  theme(axis.text = element_text(size = 14, face = "plain"),
+        legend.text = element_text(size = 12, face = "plain"),
+        plot.margin = margin(5.1, 4.1, 4.1, 2.1, "pt"),
+        plot.title = element_text(hjust = 0.5, size = 14, face = "plain"),
+        legend.position = c(0.8, 0.9), legend.background = element_rect(fill = "transparent")) +
+  scale_x_date(date_breaks = "1 year", labels = function(x) format(x, "%b%y")) 
+p.gpp1.p <- p.gpp1 +
+  geom_line(aes(x= date, y = obs, color = "Observed"), size = 0.2, linetype = 5) +  
+  geom_point(aes(x= date, y = obs, color = "Observed"), size = 1, shape = 1) +  
+  theme(legend.position = "top") +
+  scale_colour_manual(name = "", values = col2)
+p.gpp1.p.d <- p.gpp1.p +
+  geom_line(data = gpp.d.long.sub.best.fit.rmse, aes(group = par.sam, color = "Best-fit RMSE"), show.legend = F, size = 0.2) 
+
+p.gpp1.p.d
+
+
+ggsave(paste0("GPP_Obs_vs_model_daily_all_years_points_lines.jpeg"), plot = p.gpp1.p.d, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 3, width = 15, units='in')
+```
+
+
+
+##
+#--------------
+####
+#### Soil Moisture: Obs versus model #-------
+####
+
+```{r}
+setwd('C:/Users/345578/Documents/GitHub/FATES_BCI_transfer/BCI/')
+nc <- nc_open( "All_42_3.nc", readunlim = FALSE)
+names(nc$var)
+# depths
+soil.depths <- nc$var[['H2OSOI']]$dim[[2]]$vals 
+soil.depths
+rm(nc)
+
+load(file.path("extract_6_7/H2OSOI.h1.extract.Rdata"))
+obs.depths <- c(10, 40, 100)
+## match the indices that those depths correspond to in soil.depths, and thus var.res.arr
+obs.depths.i <- c(4, 6, 8)
+
+# name list elements with indices
+names(var.res.arr) <- 1:length(var.res.arr) # not actually used when list is converted to table, but for the record
+## Remove unnecessary data (list elements)
+non.obs.depths.i <- c(1:length(var.res.arr))[-obs.depths.i]
+
+var.res.arr <- var.res.arr[-non.obs.depths.i]
+
+mod.swc.wide <- setDT(as.data.frame(t(var.res.arr[[1]])), keep.rownames = "date")
+summary(mod.swc.wide)
+mod.swc <- melt(mod.swc.wide, id.vars = "date", variable.name = "par.sam",
+                measure.vars = 2:ncol(mod.swc.wide))
+summary(mod.swc)
+
+mod.swc[, c("date", "depth"):=list(as.Date(date), obs.depths[1])]
+
+for(i in 2:length(obs.depths)){
+  mod.swc.wide.i <- setDT(as.data.frame(t(var.res.arr[[i]])), keep.rownames = "date")
+  mod.swc.i <- melt(mod.swc.wide.i, id.vars = "date", variable.name = "par.sam",
+                    measure.vars = 2:ncol(mod.swc.wide.i))
+  mod.swc.i[, c("date", "depth"):=list(as.Date(date), obs.depths[i])]
+  mod.swc <- rbindlist(list(mod.swc, mod.swc.i))
+}
+summary(mod.swc)
+
+
+rm(mod.swc.wide, mod.swc.i, mod.swc.wide.i, var.res.arr) # large file
+
+### adding stephan Kupers data: #-------
+swp.df <- read.table(
+  file.path("C:/Users/345578/Documents/GitHub/FATES_BCI_transfer/BCI/Val_data/BCI_Soil_moisture_mapping.txt"),
+  na.strings = c("NA", ""),
+  header = T,
+  row.names = NULL,
+  check.names = F
+)
+
+summary(swp.df)
+unique(swp.df$depth)
+range(swp.df$swc, na.rm = T)
+swp.df$depth.old <- swp.df$depth
+swp.df$depth <- cut(swp.df$depth.old, breaks = c(0, 30, 70, 120), labels = c(10, 40 , 100)) # It should really be c(15, 40 , 100
+summary(swp.df)
+swp.df[is.na(swp.df$depth),]
+swp.df <- swp.df[!is.na(swp.df$depth),]
+
+steph.sm <- swp.df %>%
+  select(date, depth, swc) %>% 
+  mutate(date = as.Date(date, format = "%m/%d/%Y"),
+         data = "Observed Plot-wide",
+         depth = as.numeric(as.character(depth)),
+         ## swc data is gravimetric. Need to be volumetric to comapre with model
+         ## with 0.8 g/cm^3 bulk dry density at 15 cm depth. Data by Matteo: data/rawHydrological model Barro Colorado Island.docx
+         swc = swc*0.8/100, # converting from % to v/v fraction 
+         yrmo = format(date, format = "%Y-%m")) 
+steph.sm <- steph.sm %>% 
+  group_by(depth, yrmo) %>% 
+  mutate(mean.date = mean(date, na.rm = TRUE)) %>%
+  ungroup(depth, yrmo)
+steph.raw <- ggplot(steph.sm, aes(x = date, y = swc, color = yrmo)) +
+  geom_point(alpha = 0.3) +
+  facet_grid(depth ~ .) +
+  scale_x_date(date_breaks = "1 month", labels = function(x) format(x, "%b%y")) +
+  ylab("Soil Water Content [m3/m3]") +
+  xlab("Date [Month-Yr]") +
+  theme(panel.grid.major.y = element_line(), panel.grid.major.x = element_blank(), legend.position = c(0.8, 0.15), axis.text = element_text(size = 10))
+ggsave("swc_by_depth_stephan data.jpeg", plot = steph.raw, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 7, width = 7, units ='in')
+
+str(steph.sm); summary(steph.sm)
+steph.quant <- steph.sm %>% 
+  group_by(depth, mean.date) %>% 
+  summarise(mean = mean(swc, na.rm = TRUE), 
+            lower = quantile(swc, na.rm = TRUE, probs = c(0.05)),
+            upper = quantile(swc, na.rm = TRUE, probs = c(0.95)),
+            q.25 = quantile(swc, na.rm = TRUE, probs = c(0.25)),
+            q.75 = quantile(swc, na.rm = TRUE, probs = c(0.75))) %>%
+  ungroup(depth, mean.date)
+steph.mean <- ggplot(steph.quant, aes(x = mean.date, y = mean)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), lty = "dotted") +
+  geom_errorbar(aes(ymin = q.25, ymax = q.75)) + # width does not work with dates
+  facet_grid(depth ~ .) +
+  ylab("Soil Water Content [m3/m3]") +
+  xlab("Date [Month-Yr]")  +
+  theme(panel.grid.major.y = element_line())
+ggsave("swc_by_depth_stephan_data_mean_50&95CI_on_yrmo_mean.date.jpeg", plot = steph.mean, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 4, width = 6, units ='in')
+
+
+```
+
+### Vertical 
+
+
+```{r}
+####-----
+swc.vertical <- vertical %>%dplyr::rename(obs = swc) %>% 
+  group_by(date, depth) %>% summarise(obs = mean(obs, na.rm = TRUE)) %>% 
+  mutate(date.depth = paste0(date, ".", depth))
+swc.vertical.mean <-  swc.vertical %>% group_by(date) %>% summarise(obs = mean(obs, na.rm = TRUE)) 
+unique(mod.swc$depth)
+summary(mod.swc)
+mod.swc.d.vert <- mod.swc %>%  
+  # subset(date >= min(as.Date(swc.vertical$date))) %>% 
+  subset(date >= min(as.Date(swc.vertical$date)) ) %>% ## date filter since otherwise vector memory exhausted
+  mutate(date.depth = paste0(date, ".", depth)) %>% 
+  group_by(date, par.sam) %>%
+  summarise_at("value", list(~ mean(., na.rm = T))) %>% as.data.frame()
+summary(mod.swc.d.vert)
+## joining vertical obs with mod
+swc.d.long.vert <- mod.swc.d.vert %>%
+  right_join(swc.vertical.mean, by = "date") %>% 
+  as.data.frame() 
+head(swc.d.long.vert); summary(swc.d.long.vert)
+
+
+
+
+# with depths 10, 40 & 100 cm
+unique(mod.swc$depth)
+mod.swc.d<-mod.swc
+#mod.swc.d <- mod.swc %>% subset(depth %in% soil.depths[c(4, 6, 8)]) %>%
+ # mutate(depth = as.character(depth))
+#mod.swc.d$depth <- recode(mod.swc.d$depth, "0.118865065276623" = 10, 
+#                          "0.366065800189972" = 40, "1.03802704811096" = 100)
+
+summary(mod.swc.d)
+mod.swc.d <- mod.swc.d %>% mutate(date.depth = paste0(date, ".", depth)) %>% as.data.frame()
+
+obs.swc.d <- horizontal %>% 
+  dplyr::rename(obs = swc) %>% group_by(date, depth) %>% summarise_at(vars(obs), ~mean(., na.rm = TRUE)) %>% 
+  mutate(date.depth = paste0(date, ".", depth)) %>% as.data.frame() #%>%
+# bind_rows(swc.single) %>% mutate(depth = as.numeric(depth))
+## To compare with plot-wide data points
+obsplot.swc.d <- steph.quant %>% 
+  dplyr::rename(date = mean.date, obs = mean) %>%
+  mutate(date.depth = paste0(date, ".", depth)) %>% as.data.frame() 
+swcplot.d.long <- mod.swc.d %>% 
+  right_join(obsplot.swc.d %>%
+               select(date.depth, obs), by = "date.depth") %>% 
+  as.data.frame() 
+head(swcplot.d.long); summary(swcplot.d.long)
+
+
+swc.d.long <- mod.swc.d %>% 
+  right_join(obs.swc.d %>% select(-date, -depth), by = "date.depth") %>% 
+  as.data.frame()
+head(swc.d.long); summary(swc.d.long)
+
+### swc normalised from 0 - 1
+norm.index <- function(x, ...){(x - min(x, ...))/c(max(x, ...) - min(x, ...))}
+mod.sat.d <- mod.swc.d %>% 
+  subset(date %in% unique(obs.swc.d$date)) %>%
+  group_by(depth) %>% 
+  mutate_at(c("value"), norm.index, na.rm = TRUE) %>% as.data.frame() 
+# because maximas are overestimated due to macropore structure, especially for the 100 cm depth normalised swc looks skewed by one value
+
+max.cut <- as.numeric(quantile(obs.swc.d$obs[which(obs.swc.d$depth == 100)], prob = 0.99)) # quantile at 0.99 = 0.490
+max(obs.swc.d$obs[which(obs.swc.d$depth == 100)]) # 0.490
+obs.sat.d <- obs.swc.d %>% 
+  mutate(obs = if_else(obs >= max.cut & depth == 100, max.cut, obs)) %>%
+  group_by(depth) %>%
+  mutate_at(c("obs"), norm.index, na.rm = TRUE) %>% 
+  mutate(date.depth = paste0(date, ".", depth)) %>% as.data.frame()
+
+######################
+sat.d.long <- obs.sat.d %>% select(-date) %>%
+  right_join(mod.sat.d %>% select(-depth), by = "date.depth") %>% 
+  # separate(date.depth, c("date", "depth"), sep = ".", extra = "merge") %>% 
+  as.data.frame() #%>% subset(!is.na(nsam))
+head(sat.d.long); summary(sat.d.long)
+
+sat.d.long <- sat.d.long %>% subset(!is.na(depth))
+# sat.d.long <- sat.d.long %>% subset(depth != 5)
+sat.d.long.sub <- sat.d.long %>% subset(date >= as.Date("2012-01-01"))
+
+sat.d.10 <- sat.d.long %>% subset(depth == "10" & !is.na(par.sam)) %>% select(-depth) %>%
+  pivot_wider(names_from = par.sam, values_from = value, -date.depth) %>% as.data.frame() 
+sat.d.40 <- sat.d.long %>% subset(depth == "40" & !is.na(par.sam)) %>% select(-depth) %>%
+  pivot_wider(names_from = par.sam, values_from = value, -date.depth) %>% as.data.frame() 
+sat.d.100 <- sat.d.long %>% subset(depth == "100" & !is.na(par.sam)) %>% select(-depth) %>%
+  pivot_wider(names_from = par.sam, values_from = value, -date.depth) %>% as.data.frame() 
+
+swcplot.d.10 <- swcplot.d.long %>% subset(depth == "10" & !is.na(par.sam)) %>% select(-depth) %>%
+  pivot_wider(names_from = par.sam, values_from = value, -date.depth) %>% as.data.frame() 
+swcplot.d.40 <- swcplot.d.long %>% subset(depth == "40" & !is.na(par.sam)) %>% select(-depth) %>%
+  pivot_wider(names_from = par.sam, values_from = value, -date.depth) %>% as.data.frame() 
+swcplot.d.100 <- swcplot.d.long %>% subset(depth == "100" & !is.na(par.sam)) %>% select(-depth) %>%
+  pivot_wider(names_from = par.sam, values_from = value, -date.depth) %>% as.data.frame() 
+
+swc.d.10 <- swc.d.long %>% subset(depth == "10" & !is.na(par.sam)) %>% select(-depth) %>%
+  pivot_wider(names_from = par.sam, values_from = value, -date.depth) %>% as.data.frame() 
+swc.d.40 <- swc.d.long %>% subset(depth == "40" & !is.na(par.sam)) %>% select(-depth) %>%
+  pivot_wider(names_from = par.sam, values_from = value, -date.depth) %>% as.data.frame() 
+swc.d.100 <- swc.d.long %>% subset(depth == "100" & !is.na(par.sam)) %>% select(-depth) %>%
+  pivot_wider(names_from = par.sam, values_from = value, -date.depth) %>% as.data.frame() 
+swc.d.vert <- swc.d.long.vert %>% subset(!is.na(par.sam)) %>% 
+  pivot_wider(names_from = par.sam, values_from = value) %>% as.data.frame() 
+
+rmse.table$sat100_daily <- rmse.table$sat40_daily <- rmse.table$sat10_daily <- NA
+nse.table$sat100_daily <- nse.table$sat40_daily <- nse.table$sat10_daily <- NA
+rsq.table$sat100_daily <- rsq.table$sat40_daily <- rsq.table$sat10_daily <- NA
+
+rmse.table$swc.vert_daily <- rmse.table$swc100_daily <- rmse.table$swc40_daily <- rmse.table$swc10_daily <- 
+  rmse.table$swcplot100_daily <- rmse.table$swcplot40_daily <- rmse.table$swcplot10_daily <- NA
+nse.table$swc.vert_daily <- nse.table$swc100_daily <- nse.table$swc40_daily <- nse.table$swc10_daily <- 
+  nse.table$swcplot100_daily <- nse.table$swcplot40_daily <- nse.table$swcplot10_daily <- NA
+rsq.table$swc.vert_daily <- rsq.table$swc100_daily <- rsq.table$swc40_daily <- rsq.table$swc10_daily <- 
+  rsq.table$swcplot100_daily <- rsq.table$swcplot40_daily <- rsq.table$swcplot10_daily <- NA
+
+sat.obs.10 <- sat.d.10$obs; sat.obs.40 <- sat.d.40$obs; sat.obs.100 <- sat.d.100$obs; 
+swc.obs.10 <- swc.d.10$obs; swc.obs.40 <- swc.d.40$obs; swc.obs.100 <- swc.d.100$obs; swc.obs.vert <- swc.d.vert$obs;
+swcplot.obs.10 <- swcplot.d.10$obs; swcplot.obs.40 <- swcplot.d.40$obs; swcplot.obs.100 <- swcplot.d.100$obs; 
+for (i in 1: nsam) {
+  par.sam.mod <- as.numeric(colnames(swc.d.10[i + 2])) # same for all other tables
+  row.sam <- which(nse.table$par.sam == par.sam.mod) ## same for rmse
+  swcplot.sim.10 <- swcplot.d.10[, i + 2]
+  swcplot.sim.40 <- swcplot.d.40[, i + 2]
+  swcplot.sim.100 <- swcplot.d.100[, i + 2]
+  
+  swc.sim.10 <- swc.d.10[, i + 2]
+  swc.sim.40 <- swc.d.40[, i + 2]
+  swc.sim.100 <- swc.d.100[, i + 2]
+  swc.sim.vert <- swc.d.vert[, i + 2]
+  ## normalised
+  sat.sim.10 <- sat.d.10[, i + 2]
+  sat.sim.40 <- sat.d.40[, i + 2]
+  sat.sim.100 <- sat.d.100[, i + 2]
+  ## for rmse
+  rmse.table$swcplot10_daily[row.sam] <- round(as.numeric(mean((swcplot.sim.10 - swcplot.obs.10)^2, na.rm = TRUE))^0.5, 3)
+  rmse.table$swcplot40_daily[row.sam] <- round(as.numeric(mean((swcplot.sim.40 - swcplot.obs.40)^2, na.rm = TRUE))^0.5, 3)
+  rmse.table$swcplot100_daily[row.sam] <- round(as.numeric(mean((swcplot.sim.100 - swcplot.obs.100)^2, na.rm = TRUE))^0.5, 3)
+  
+  rmse.table$swc10_daily[row.sam] <- round(as.numeric(mean((swc.sim.10 - swc.obs.10)^2, na.rm = TRUE))^0.5, 3)
+  rmse.table$swc40_daily[row.sam] <- round(as.numeric(mean((swc.sim.40 - swc.obs.40)^2, na.rm = TRUE))^0.5, 3)
+  rmse.table$swc100_daily[row.sam] <- round(as.numeric(mean((swc.sim.100 - swc.obs.100)^2, na.rm = TRUE))^0.5, 3)
+  rmse.table$swc.vert_daily[row.sam] <- round(as.numeric(mean((swc.sim.vert - swc.obs.vert)^2, na.rm = TRUE))^0.5, 3)
+  
+  rmse.table$sat10_daily[row.sam] <- round(as.numeric(mean((sat.sim.10 - sat.obs.10)^2, na.rm = TRUE))^0.5, 3)
+  rmse.table$sat40_daily[row.sam] <- round(as.numeric(mean((sat.sim.40 - sat.obs.40)^2, na.rm = TRUE))^0.5, 3)
+  rmse.table$sat100_daily[row.sam] <- round(as.numeric(mean((sat.sim.100 - sat.obs.100)^2, na.rm = TRUE))^0.5, 3)
+  
+  # for rsq
+  rsq.table$swcplot10_daily[row.sam] <- round(as.numeric(cor(swcplot.obs.10, swcplot.sim.10, method = "pearson", use = "complete.obs"))^2, 3)
+  rsq.table$swcplot40_daily[row.sam] <- round(as.numeric(cor(swcplot.obs.40, swcplot.sim.40, method = "pearson", use = "complete.obs"))^2, 3)
+  rsq.table$swcplot100_daily[row.sam] <- round(as.numeric(cor(swcplot.obs.100, swcplot.sim.100, method = "pearson", use = "complete.obs"))^2, 3)
+  rsq.table$swc10_daily[row.sam] <- round(as.numeric(cor(swc.obs.10, swc.sim.10, method = "pearson", use = "complete.obs"))^2, 3)
+  rsq.table$swc40_daily[row.sam] <- round(as.numeric(cor(swc.obs.40, swc.sim.40, method = "pearson", use = "complete.obs"))^2, 3)
+  rsq.table$swc100_daily[row.sam] <- round(as.numeric(cor(swc.obs.100, swc.sim.100, method = "pearson", use = "complete.obs"))^2, 3)
+  rsq.table$swc.vert_daily[row.sam] <- round(as.numeric(cor(swc.obs.vert, swc.sim.vert, method = "pearson", use = "complete.obs"))^2, 3)
+  rsq.table$sat10_daily[row.sam] <- round(as.numeric(cor(sat.obs.10, sat.sim.10, method = "pearson", use = "complete.obs"))^2, 3)
+  rsq.table$sat40_daily[row.sam] <- round(as.numeric(cor(sat.obs.40, sat.sim.40, method = "pearson", use = "complete.obs"))^2, 3)
+  rsq.table$sat100_daily[row.sam] <- round(as.numeric(cor(sat.obs.100, sat.sim.100, method = "pearson", use = "complete.obs"))^2, 3)
+  
+  ## for nse
+  nse.table$swcplot10_daily[row.sam] <- NSE(swcplot.obs.10, swcplot.sim.10, na.rm = TRUE)
+  nse.table$swcplot40_daily[row.sam] <- NSE(swcplot.obs.40, swcplot.sim.40, na.rm = TRUE)
+  nse.table$swcplot100_daily[row.sam] <- NSE(swcplot.obs.100, swcplot.sim.100, na.rm = TRUE)
+  nse.table$swc10_daily[row.sam] <- NSE(swc.obs.10, swc.sim.10, na.rm = TRUE)
+  nse.table$swc40_daily[row.sam] <- NSE(swc.obs.40, swc.sim.40, na.rm = TRUE)
+  nse.table$swc100_daily[row.sam] <- NSE(swc.obs.100, swc.sim.100, na.rm = TRUE)
+  nse.table$swc.vert_daily[row.sam] <- NSE(swc.obs.vert, swc.sim.vert, na.rm = TRUE)
+  nse.table$sat10_daily[row.sam] <- NSE(sat.obs.10, sat.sim.10, na.rm = TRUE)
+  nse.table$sat40_daily[row.sam] <- NSE(sat.obs.40, sat.sim.40, na.rm = TRUE)
+  nse.table$sat100_daily[row.sam] <- NSE(sat.obs.100, sat.sim.100, na.rm = TRUE)
+}
+summary(rsq.table); summary(nse.table)
+
+
+write.csv(rmse.table, file = file.path("rmse.table.csv"), row.names = FALSE)
+write.csv(nse.table, file = file.path( "nse.table.csv"), row.names = FALSE)
+write.csv(rsq.table, file = file.path("rsq.table.csv"), row.names = FALSE)
+
+params.rmse <- par.on %>% full_join(rmse.table, by = "par.sam")
+write.csv(params.rmse, file = file.path("params.rmse.csv"), row.names = FALSE)
+params.nse <- par.on %>% full_join(nse.table, by = "par.sam")
+write.csv(params.nse, file = file.path("params.nse.csv"), row.names = FALSE)
+params.rsq <- par.on %>% full_join(rsq.table, by = "par.sam")
+write.csv(params.rsq, file = file.path("params.rsq.csv"), row.names = FALSE)
+
+## best fit with vert swc and swcplot based on nse and sat based on rsq
+rsq.best.vert.d <- sort(rsq.table$swc.vert_daily, decreasing = TRUE)[1:10]
+rsq.best.10.d <- sort(rsq.table$sat10_daily, decreasing = TRUE)[1:10]
+rsq.best.40.d <- sort(rsq.table$sat40_daily, decreasing = TRUE)[1:10]
+rsq.best.100.d <- sort(rsq.table$sat100_daily, decreasing = TRUE)[1:10]
+nse.best.vert.d <- sort(nse.table$swc.vert_daily, decreasing = TRUE)[1:10]
+rmse.best.10.d <- sort(rmse.table$swcplot10_daily, decreasing = FALSE)[1:10]
+rmse.best.40.d <- sort(rmse.table$swcplot40_daily, decreasing = FALSE)[1:10]
+rmse.best.100.d <- sort(rmse.table$swcplot100_daily, decreasing = FALSE)[1:10]
+
+best.par.n.sat.row.d <- c(which(rsq.table$sat10_daily %in% rsq.best.10.d),  
+                          which(rsq.table$sat40_daily %in% rsq.best.40.d), 
+                          which(rsq.table$sat100_daily %in% rsq.best.100.d)) 
+best.par.n.sat.d <- rsq.table$par.sam[best.par.n.sat.row.d]
+best.par.n.swc.row.d <- c(which(rmse.table$swcplot10_daily %in% rmse.best.10.d),  
+                          which(rmse.table$swcplot40_daily %in% rmse.best.40.d), 
+                          which(rmse.table$swcplot100_daily %in% rmse.best.100.d)) 
+best.par.n.swc.d <- rmse.table$par.sam[best.par.n.swc.row.d]
+## those abs best fits that have good rel fits as well
+best.par.n.swc.d.sub.df <- rsq.table %>% subset(par.sam %in% best.par.n.swc.d) %>%
+  # subset(sat10_daily > 0.82 & sat40_daily > 0.85 & sat100_daily > 0.78) # does not fit with depth 100 cm
+  subset(sat10_daily > 0.8 & sat40_daily > 0.8 & sat100_daily > 0.7)
+
+best.par.n.swc.d.sub <- best.par.n.swc.d.sub.df$par.sam
+
+best.par.n.swc.vert.d <- nse.table$par.sam[which(nse.table$swc.vert_daily %in% nse.best.vert.d)]
+# ## rsq for the ensemble with max nse
+# rsq.for.best.nse.10.d <- rsq.table$swc10_daily[which(nse.table$sat10_daily == nse.best.10.d)]
+# rsq.for.best.nse.40.d <- rsq.table$sat40_daily[which(nse.table$sat40_daily == nse.best.40.d)]
+# rsq.for.best.nse.100.d <- rsq.table$sat100_daily[which(nse.table$sat100_daily == nse.best.100.d)]
+rsq.for.best.nse.vert.d <- rsq.table$swc.vert_daily[which(nse.table$swc.vert_daily %in% nse.best.vert.d)]
+
+obs.swc.d %>% group_by(depth) %>% 
+  summarise(min = min(obs, na.rm = TRUE), max = max(obs, na.rm = TRUE))
+# depth   min   max
+# <dbl> <dbl> <dbl>
+# 1    10 0.187 0.480
+# 2    40 0.250 0.471
+# 3   100 0.411 0.507
+
+# on the best-fit plot normalise matteo's data to range between model data range: but which par.sam?
+mod.swc.d %>%  
+  group_by(depth) %>% 
+  summarise(min = min(value, na.rm = TRUE), max = max(value, na.rm = TRUE))
+# depth   min   max
+# 1    10 0.150 0.510
+# 2    40 0.150 0.510
+# 3   100 0.150 0.510
+## same by depth, but the minimum is not observed in the observed data period
+mod.swc.d %>% subset(date >= min(obs.swc.d$date) & par.sam %in% best.par.n.swc.d) %>% 
+  group_by(depth, par.sam) %>% 
+  summarise(min = min(value, na.rm = TRUE), max = max(value, na.rm = TRUE))
+## min max vary by par.sim
+## so pick the range from the range for the best-fits 
+swc.range.best <- mod.swc.d %>% subset(date >= min(obs.swc.d$date) & par.sam %in% best.par.n.swc.d.sub) %>% 
+  group_by(depth) %>% 
+  summarise(lower = min(value, na.rm = TRUE), upper = max(value, na.rm = TRUE))
+# depth lower upper
+# 1    10 0.237 0.507
+# 2    40 0.255 0.510
+# 3   100 0.268 0.510
+swc.d.long <- swc.d.long %>% left_join(swc.range.best, by = "depth")
+swc.d.long <- swc.d.long %>% subset(!is.na(depth))
+swc.d.long <- swc.d.long %>% 
+  group_by(depth) %>% 
+  mutate(sat = rescale(obs, to = c(lower[1], upper[1]))) %>% as.data.frame() 
+
+swc.d.long.sub <- subset(swc.d.long, !depth %in% c(5, 300)) %>% droplevels()
+swc.d.vert.long.sub <- subset(swc.d.long.vert, date >= as.Date("2012-07-01") & date < as.Date("2019-01-01")) 
+
+sat.d.long <- sat.d.long %>% subset(!is.na(depth))
+sat.d.long.sub <- subset(sat.d.long.sub,!depth %in% c(5, 300)) %>% droplevels()
+
+label.depths <- paste0(paste0("RMSE.best ", round(c(rmse.best.10.d[1], rmse.best.40.d[1], rmse.best.100.d[1]), 3)), 
+                       "; ", paste0("R-squared.max = ", round(c(rsq.best.10.d[1], rsq.best.40.d[1], rsq.best.100.d[1]), 2)))
+dat_text <- data.frame(label = label.depths, depth = c(10, 40, 100))
+```
+
+```{r}
+
+g1 <- ggplot(swc.d.long.sub, aes(x = date)) +
+  #geom_line(aes(group = par.sam, color = "Simulated"), show.legend = F, size = 0.2) +
+  ## adding Observed normalised
+  geom_line(data = swc.d.long.sub, aes(y = sat, color = "Observed Point Location"), size = 1) +
+  scale_colour_manual(name = "", values = col1) + ylim(0.18, 0.57) +
+  ylab("Soil Water Content [m3/m3]") +
+  xlab("Date") + 
+  theme(axis.text = element_text(size = 14, face = "plain"),
+        legend.text = element_text(size = 16, face = "plain"),
+        legend.background = element_rect(fill = "transparent")) +
+  scale_x_date(date_breaks = "6 months", labels = function(x) format(x, "%b%y")) +
+  ggtitle("Soil Water Content: Observed vs Ensemble simulations by depth")
+
+p.h.swc <- g1 + facet_grid(depth ~ .) + 
+  geom_text(data = dat_text, mapping = aes(x = min(swc.d.long.sub$date) + 100, 
+                                           y = 0.57, label = label),
+            hjust = -0.1, vjust = 2) +
+  theme(legend.position = "top") +
+  geom_line(data = swc.d.long.sub %>% subset(par.sam %in% best.par.n.sat.d), 
+            aes(y = value, group = par.sam, color = "Best-fit Simulated"), size = 0.5) +
+  geom_line(data = swc.d.long.sub %>% subset(par.sam %in% best.par.n.swc.d.sub), 
+            aes(y = value, group = par.sam, color = "Best-fit Simulated"), size = 0.5)
+#ggsave("swc_Obs_vs_model_daily_horizontal.jpeg", plot = p.h.swc, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 7, width = 11, units ='in')
+g1
+```
+```{r}
+# dates on which 100 cm data were collected
+dates.100 <- unique(steph.sm[steph.sm$depth == 100, ]$date) 
+steph.depth <- ggplot(steph.sm %>% subset(date %in% dates.100) %>% mutate(depth = as.factor(depth)), 
+                      aes(x = depth, y = swc, fill = depth)) + theme_bw() +
+  geom_boxplot() + 
+  stat_summary(fun = mean, colour = "black", geom = "point", 
+               shape = 20, size = 3, show.legend = FALSE) + 
+  ylab("Soil Water Content [m3/m3]") +
+  xlab("Depth [cm]") 
+ggsave("swc_by_depth_stephan data_comparing dates on 100 cm data present.jpeg", plot = steph.depth, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 5, width = 5, units ='in')
+
+swc.d.vert.long.sub.small <- swc.d.vert.long.sub %>% subset(par.sam %in% best.par.n.swc.vert.d[1])  
+## With vertical:
+p.v.swc <- ggplot(swc.d.vert.long.sub.small, aes(x = date)) +
+  #geom_line(aes(group = par.sam, color = "Simulated"), show.legend = F, size = 0.2) +
+  ## adding Observed normalised
+  geom_line(data = swc.d.vert.long.sub.small, aes(y = obs, color = "Observed Point Location"), size = 1) +
+  scale_colour_manual(name = "", values = col1) + 
+  ylab("Soil Water Content [m3/m3]") +
+  xlab("Date") + 
+  theme(axis.text = element_text(size = 14, face = "plain"),
+        legend.text = element_text(size = 16, face = "plain"),
+        legend.background = element_rect(fill = "transparent")) +
+  scale_x_date(date_breaks = "6 months", labels = function(x) format(x, "%b%y")) +
+  ggtitle("Soil Water Content: Observed vs Ensemble simulations by depth") +
+  theme(legend.justification = c(1, 1), legend.position=c(0.97, 0.97)) +
+  # geom_point(data = steph.sm, aes(x = date, y = swc, color = "Observed Plot-wide"), 
+  #            show.legend = F, size = 0.5, alpha = 0.3, fill = "gray") +
+  geom_text(aes(x = min(date) + 700, y = 0.53, label = 
+                  as.character(paste0("NSE.best ", round(nse.best.vert.d[1], 2), "; R-squared = ", round(max(rsq.for.best.nse.vert.d[1], na.rm = TRUE), 2), 
+                                      "\n R-squared.max = ", round(rsq.best.vert.d[1], 2)))), vjust = 2) +
+  geom_line(data = swc.d.vert.long.sub %>% subset(par.sam %in% best.par.n.swc.vert.d[1]), 
+            aes(y = value, group = par.sam, color = "Best-fit Simulated"), show.legend = F, size = 0.5)
+#ggsave("swc_Obs_vs_model_daily_vertical.jpeg", plot = p.v.swc, path = file.path('C:/Users/345578/Desktop/BCI/figure/'), device = "jpeg", height = 5, width = 11, units ='in')
+p.v.swc 
+
+
+```
+```{r}
+
+# Horizontal normalised
+p.h.sat <- ggplot(sat.d.long.sub, aes(x = date, y = value)) +
+  geom_line(aes(group = par.sam, color = "Simulated"), show.legend = F, size = 0.2) +
+  geom_line(aes(x= date, y = obs, color = "Observed"), size = 1) +
+  scale_colour_manual(name = "", values = col1) + 
+  ylab("Normalised Soil Water Content [0-1, unitless]") +
+  xlab("Date") + 
+  theme(axis.text = element_text(size = 14, face = "plain"),
+        legend.text = element_text(size = 16, face = "plain"),
+        legend.background = element_rect(fill = "transparent")) +
+  scale_x_date(date_breaks = "6 months", labels = function(x) format(x, "%b%y")) +
+  facet_grid(depth ~ .) + 
+  geom_text(data  = dat_text, mapping = aes(x = min(sat.d.long.sub$date) + 100, 
+                                            y = 1.2, label = label),
+            hjust   = -0.1, vjust = 2) +
+  theme(legend.position = "top") +  
+  geom_line(data = sat.d.long.sub %>% subset(par.sam %in% best.par.n.sat.d), 
+            aes(y = value, group = par.sam, color = "Best-fit Simulated"), size = 0.5) +
+  geom_line(data = sat.d.long.sub %>% subset(par.sam %in% best.par.n.swc.d), 
+            aes(y = value, group = par.sam, color = "Best-fit Simulated"), size = 0.5) +
+  ggtitle("Normalised Soil Water Content: Observed vs Ensemble simulations by depth")
+p.h.sat
+```
+
+```{r}
+sat.d.long.sub
+
+
+```
+
