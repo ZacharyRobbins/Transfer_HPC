@@ -50,8 +50,8 @@ Vegframe=pd.DataFrame({'TissueType':['tw_sf','sb_sf','lb_sf','tr_sf','deadleaves
           })
 #### Other user defined parameters
 
-NI_param_a=200 ## NI_parameter_a
-NI_param_b=200 ## NI_parameter_b
+NI_param_a=12 ## NI_parameter_a
+NI_param_b=76 ## NI_parameter_b
  ### Percent of the stand that is tree fraction 
 cg_strikes=1
 ED_val_nignitions=1
@@ -74,7 +74,7 @@ SF_val_fuel_energy=18000
 #wind=20
 ##Weather 
 #fire_danger_index(Site_Ni,Daily_Temp_C,Daily_Rainfall,Daily_rh,
-#                      NI_param_a,NI_param_b)
+#                       NI_param_a,NI_param_b)
 
 
 Outy=pd.DataFrame(columns=["Run","tree_fraction","SF_val_drying_ratio","mineral_total","SF_val_miner_damp","SF_val_part_dens","SF_val_durat_slope",'wind',"Site_Ni","Fractionburned","Fire_intensity","AB",'ROS_front',"fuel_moisture"])
@@ -83,9 +83,9 @@ Outy=pd.DataFrame(columns=["Run","tree_fraction","SF_val_drying_ratio","mineral_
 for r in list(range(1,100000)):
     print(r)
     ###Generate Parameters
-    wind=np.random.uniform(5,50)
-    Site_Ni=np.random.uniform(1000,7000)
-    SF_val_drying_ratio=np.random.uniform(5000,30000)
+    wind=np.random.uniform(2,10)
+    Site_Ni=np.random.uniform(3000,12000)
+    SF_val_drying_ratio=np.random.uniform(100,5000)
     mineral_total=np.random.uniform(.01,.1)                                   
     SF_val_miner_damp =np.random.uniform(0.3,0.5) 
     SF_val_fdi_alpha=np.random.uniform(1.0,10.0) 
@@ -143,4 +143,4 @@ for r in list(range(1,100000)):
                        "fuel_moisture":fuel_moisture
                        })
     Outy=Outy.append(Inny)
-Outy.to_csv("FireSpread_100k.csv")
+Outy.to_csv("FireSpread_100k_2.csv")
