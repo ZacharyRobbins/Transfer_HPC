@@ -110,7 +110,7 @@ load(file.path("C:/Users/345578/Documents/GitHub/Transfer_HPC/C_STOMATA.h1.extra
 C_STOMATA<-ProctoDF(var.res.arr)#'mean stomatal conductance' 'umol m-2 s-1'
 Grouped<-LWP %>%group_by(Date,Replicate)%>%summarise(Mean_LWP=min(Variable))
 Joined<-merge(Grouped,C_STOMATA,by=c("Date","Replicate"))
-Joined$HydraulicCond<-Joined$Variable/10000
+Joined$StomatCond<-Joined$Variable/10000
 ```
 
 
@@ -123,7 +123,7 @@ for(i in 1:length(runs)){
   subs$LWP_round<-round(subs$Mean_LWP,2)
   Joined_obs<-merge(subs,Observed,by='LWP_round',all.x =T)
   Joined_obs$K_obs[is.na(Joined_obs$K_obs)]<-0.0
-  m1<-lm(Joined_obs$HydraulicCond~Joined_obs$K_obs)
+  m1<-lm(Joined_obs$StomatCond~Joined_obs$K_obs)
   output=data.frame(run=runs[i],r2=summary(m1)$r.squared)
   if(i==1){output_df=output}else(
   output_df=rbind(output_df,output))
@@ -136,9 +136,9 @@ for(i in 1:length(runs)){
 best=output_df$run[output_df$r2==max(output_df$r2)]
 best_df=Joined[Joined$Replicate==best,]
 ggplot()+
-  geom_line(aes(x=Mean_LWP,y=HydraulicCond,fill=Replicate,color=Replicate),dat=Joined,wd=1.0,type="points")+
+  geom_line(aes(x=Mean_LWP,y=StomatCond,fill=Replicate,color=Replicate),dat=Joined,wd=1.0,type="points")+
   geom_line(aes(x=LWP_round, y=K_obs, fill='black'), Observed,lwd=2.0)+
-  geom_line(aes(x=Mean_LWP, y=HydraulicCond, fill=alpha('green',0.5)), dat=best_df)+
+  geom_line(aes(x=Mean_LWP, y=StomatCond, fill=alpha('green',0.5)), dat=best_df)+
   theme_classic()
 ```
 
