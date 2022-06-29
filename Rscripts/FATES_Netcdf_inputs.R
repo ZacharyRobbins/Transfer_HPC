@@ -54,7 +54,8 @@ createnewcdf<-function(Drive,file,newname,varDF){
 fates_para=nc_open(paste0(Drive,file))
 #fates_para=file
 names(fates_para$var)
-var_name="fates_fire_nignitions"  
+var_name="fates_leaf_vcmax25top"
+fates_para$var[["fates_leaf_vcmax25top"]]$ 
 fates_para$var[[var_name]]$unit
 fates_para$var[[var_name]]$longname
 ncvar_get(fates_para,var_name)
@@ -83,7 +84,7 @@ Var_2_change<-data.frame(
 
 #### File that is the baseline
 Drive='C:/Users/345578/Documents/GitHub/Transfer_HPC/'
-file='fates_params_CA_StuntRanch.nc'
+file='fates_params_opt224_vmn6phi_080621.971.nc'
 newname="fates_params_CA_SR_update2.nc"
 
 
