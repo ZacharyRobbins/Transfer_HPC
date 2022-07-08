@@ -1,0 +1,3 @@
+parameter,value,valuemin,valuemax,pft.start,pft.end,org.start,org.end
+fates_fire_nignitions,40,0.294262051,29.42620509,1,1,0,0
+fates_fire_SAV,0.00185,66,120,1,1,5,5
