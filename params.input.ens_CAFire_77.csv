@@ -1,5 +1,0 @@
-parameter,value,valuemin,valuemax,pft.start,pft.end,org.start,org.end
-fates_fire_nignitions,40,0.003,0.294262051,1,1,0,0
-fates_fire_fdi_alpha,10,0.000035,0.00037,1,1,0,0
-fates_fire_drying_ratio,60000,6000,60000,1,1,0,0
-fates_fire_threshold,50,50,1000,1,1,0,0
